@@ -128,6 +128,12 @@ uint8_t lv_demo_ai_pocket_pet_get_battery_level(void);
  */
 bool lv_demo_ai_pocket_pet_get_battery_charging(void);
 
+/**
+ * Get the main screen object
+ * @return Pointer to the main screen
+ */
+lv_obj_t* lv_demo_ai_pocket_pet_get_main_screen(void);
+
 /**********************
  *      MACROS
  **********************/

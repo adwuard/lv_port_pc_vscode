@@ -1,12 +1,12 @@
 /**
- * @file lv_keyboard_widget.c
+ * @file keyboard.c
  * Custom Keyboard Widget for AI Pocket Pet
  */
 
 /*********************
  *      INCLUDES
  *********************/
-#include "lv_keyboard_widget.h"
+#include "keyboard.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +75,7 @@ static keyboard_widget_t g_keyboard_widget;
  *   GLOBAL FUNCTIONS
  **********************/
 
-void lv_keyboard_widget_init(void)
+void keyboard_init(void)
 {
     memset(&g_keyboard_widget, 0, sizeof(keyboard_widget_t));
     g_keyboard_widget.is_active = false;
@@ -85,7 +85,7 @@ void lv_keyboard_widget_init(void)
     memset(g_keyboard_widget.current_text, 0, sizeof(g_keyboard_widget.current_text));
 }
 
-void lv_keyboard_widget_show(const char *initial_text, keyboard_callback_t callback, void *user_data)
+void keyboard_show(const char *initial_text, keyboard_callback_t callback, void *user_data)
 {
     keyboard_widget_t *keyboard = &g_keyboard_widget;
 
@@ -123,18 +123,29 @@ void lv_keyboard_widget_show(const char *initial_text, keyboard_callback_t callb
     update_selection_highlight(keyboard);
 }
 
-void lv_keyboard_widget_hide(void)
+void keyboard_hide(void)
 {
     keyboard_widget_t *keyboard = &g_keyboard_widget;
 
     if (keyboard->is_active && keyboard->keyboard_screen) {
+        // Check if the keyboard screen is currently active
+        lv_obj_t *active_screen = lv_screen_active();
+        if (active_screen == keyboard->keyboard_screen) {
+            // The keyboard screen is active, we need to load a different screen first
+            // to avoid deleting the active screen
+            printf("Warning: Keyboard screen is active, cannot delete safely\n");
+            // Don't delete for now - let the callback handle screen restoration
+            keyboard->is_active = false;
+            return;
+        }
+
         lv_obj_del(keyboard->keyboard_screen);
         keyboard->keyboard_screen = NULL;
         keyboard->is_active = false;
     }
 }
 
-void lv_keyboard_widget_handle_input(uint32_t key)
+void keyboard_handle_input(uint32_t key)
 {
     keyboard_widget_t *keyboard = &g_keyboard_widget;
 
@@ -190,7 +201,7 @@ void lv_keyboard_widget_handle_input(uint32_t key)
             if (keyboard->callback) {
                 keyboard->callback(KEYBOARD_RESULT_CANCEL, NULL, keyboard->user_data);
             }
-            lv_keyboard_widget_hide();
+            keyboard_hide();
             break;
 
         case KEY_BACKSPACE:
@@ -217,9 +228,21 @@ void lv_keyboard_widget_handle_input(uint32_t key)
     }
 }
 
-bool lv_keyboard_widget_is_active(void)
+bool keyboard_is_active(void)
 {
     return g_keyboard_widget.is_active;
+}
+
+void keyboard_cleanup(void)
+{
+    keyboard_widget_t *keyboard = &g_keyboard_widget;
+
+    // Now it's safe to delete the keyboard screen if it exists
+    if (keyboard->keyboard_screen) {
+        lv_obj_del(keyboard->keyboard_screen);
+        keyboard->keyboard_screen = NULL;
+    }
+    keyboard->is_active = false;
 }
 
 /**********************
@@ -327,7 +350,7 @@ static void key_button_event_cb(lv_event_t *e)
 static void keyboard_event_cb(lv_event_t *e)
 {
     uint32_t key = lv_event_get_key(e);
-    lv_keyboard_widget_handle_input(key);
+    keyboard_handle_input(key);
 }
 
 static void update_text_display(keyboard_widget_t *keyboard)
@@ -378,13 +401,13 @@ static void handle_key_press(keyboard_widget_t *keyboard, const char *key_text)
         if (keyboard->callback) {
             keyboard->callback(KEYBOARD_RESULT_OK, keyboard->current_text, keyboard->user_data);
         }
-        lv_keyboard_widget_hide();
+        keyboard_hide();
     } else if (strcmp(key_text, "ESC") == 0) {
         // Escape - cancel input
         if (keyboard->callback) {
             keyboard->callback(KEYBOARD_RESULT_CANCEL, NULL, keyboard->user_data);
         }
-        lv_keyboard_widget_hide();
+        keyboard_hide();
     } else if (strcmp(key_text, " ") == 0) {
         // Space character
         if (keyboard->text_length < KEYBOARD_MAX_TEXT_LENGTH) {

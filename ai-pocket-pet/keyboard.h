@@ -1,10 +1,10 @@
 /**
- * @file lv_keyboard_widget.h
+ * @file keyboard.h
  * Custom Keyboard Widget for AI Pocket Pet
  */
 
-#ifndef LV_KEYBOARD_WIDGET_H
-#define LV_KEYBOARD_WIDGET_H
+#ifndef KEYBOARD_H
+#define KEYBOARD_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,7 +45,7 @@ typedef void (*keyboard_callback_t)(keyboard_result_t result, const char *text, 
 /**
  * Initialize the keyboard widget
  */
-void lv_keyboard_widget_init(void);
+void keyboard_init(void);
 
 /**
  * Show the keyboard widget
@@ -53,24 +53,30 @@ void lv_keyboard_widget_init(void);
  * @param callback Callback function to handle keyboard results
  * @param user_data User data passed to callback
  */
-void lv_keyboard_widget_show(const char *initial_text, keyboard_callback_t callback, void *user_data);
+void keyboard_show(const char *initial_text, keyboard_callback_t callback, void *user_data);
 
 /**
  * Hide the keyboard widget
  */
-void lv_keyboard_widget_hide(void);
+void keyboard_hide(void);
 
 /**
  * Handle input events for the keyboard widget
  * @param key The key pressed
  */
-void lv_keyboard_widget_handle_input(uint32_t key);
+void keyboard_handle_input(uint32_t key);
 
 /**
  * Check if keyboard widget is currently active
  * @return true if keyboard is active, false otherwise
  */
-bool lv_keyboard_widget_is_active(void);
+bool keyboard_is_active(void);
+
+/**
+ * Cleanup keyboard after screen has been restored
+ * This should be called after the main screen is loaded
+ */
+void keyboard_cleanup(void);
 
 /**********************
  *      MACROS
@@ -80,4 +86,4 @@ bool lv_keyboard_widget_is_active(void);
 } /* extern "C" */
 #endif
 
-#endif /* LV_KEYBOARD_WIDGET_H */
+#endif /* KEYBOARD_H */
