@@ -37,6 +37,8 @@ endif()
 
 # Main include files of the project
 include_directories(${PROJECT_SOURCE_DIR}/main/inc)
+# AI Pocket Pet components
+include_directories(${PROJECT_SOURCE_DIR}/ai-pocket-pet)
 
 # Define options for LVGL with default values (OFF)
 option(LV_USE_DRAW_SDL "Use SDL draw unit" OFF)
@@ -86,8 +88,12 @@ else()
     add_executable(main
         ${PROJECT_SOURCE_DIR}/main/src/main.c
         ${PROJECT_SOURCE_DIR}/main/src/mouse_cursor_icon.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/lv_demo_ai_pocket_pet.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/lv_keyboard_widget.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/ai_pocket_pet_app.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/keyboard.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/status_bar.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/pet_area.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/menu_system.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/toast.c
     )
 endif()
 

@@ -15,7 +15,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/examples/lv_examples.h"
 #include "lvgl/demos/lv_demos.h"
-#include "../ai-pocket-pet/lv_demo_ai_pocket_pet.h"
+#include "../ai-pocket-pet/ai_pocket_pet_app.h"
 #include "glob.h"
 
 /*********************
