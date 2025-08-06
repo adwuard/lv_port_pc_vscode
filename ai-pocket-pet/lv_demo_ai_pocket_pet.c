@@ -16,18 +16,37 @@
 #include <string.h>
 #include <math.h>
 
+// Custom menu icons
+#include "data/icons/menu_info_icon.c"
+#include "data/icons/menu_eat_icon.c"
+#include "data/icons/menu_sleep_icon.c"
+#include "data/icons/menu_sick_icon.c"
+#include "data/icons/menu_toilet_icon.c"
+#include "data/icons/menu_camera_icon.c"
+
+// Pet animation
+#include "data/ducky/ducky_walk.c"
+LV_IMG_DECLARE(ducky_walk);
+
 /*********************
  *      DEFINES
  *********************/
 #define STATUS_BAR_HEIGHT 20
-#define BOTTOM_MENU_HEIGHT 40
+#define BOTTOM_MENU_HEIGHT 26
 #define PET_AREA_HEIGHT (AI_PET_SCREEN_HEIGHT - STATUS_BAR_HEIGHT - BOTTOM_MENU_HEIGHT)
 
+// Toast message constants
+#define TOAST_PADDING 20
+#define TOAST_MAX_WIDTH (AI_PET_SCREEN_WIDTH - 40)
+#define TOAST_MIN_HEIGHT 60
+#define TOAST_ANIMATION_DURATION 300
+#define TOAST_DEFAULT_DELAY 3000
+
 // UI Constants
-#define MENU_BUTTON_COUNT 5
+#define MENU_BUTTON_COUNT 6
 #define MENU_BUTTON_SIZE 24
 #define MENU_BUTTON_SPACING 25
-#define MENU_BUTTON_START_X (AI_PET_SCREEN_WIDTH - 280)
+#define MENU_BUTTON_START_X (AI_PET_SCREEN_WIDTH - 250)
 #define SUB_MENU_PADDING 10
 #define SUB_MENU_TITLE_OFFSET 10
 #define SUB_MENU_LIST_OFFSET 40
@@ -44,11 +63,12 @@
 #define KEY_ESC   27  // LV_KEY_ESC
 #define KEY_I     105 // 'i' key
 
+#define LV_IMG_DECLARE(var_name) extern const lv_image_dsc_t var_name;
 // Pet animation constants
-#define PET_ANIMATION_INTERVAL 2000
-#define PET_MOVEMENT_INTERVAL 3000
-#define PET_MOVEMENT_STEP 10
-#define PET_MOVEMENT_LIMIT 150
+#define PET_ANIMATION_INTERVAL 20
+#define PET_MOVEMENT_INTERVAL 20  // Move more frequently (was 3000)
+#define PET_MOVEMENT_STEP 1        // Move a larger step (was 10)
+#define PET_MOVEMENT_LIMIT 100      // Reduced for larger GIF
 
 // Pet stats constants
 #define MAX_STAT_VALUE 100
@@ -68,10 +88,16 @@ typedef struct {
     lv_obj_t *battery_icon;
     lv_obj_t *pet_area;
     lv_obj_t *pet_sprite;
+    lv_obj_t *pet_image;
     lv_obj_t *bottom_menu;
     lv_obj_t *menu_buttons[MENU_BUTTON_COUNT];
     lv_obj_t *sub_menu;
     lv_obj_t *sub_menu_list;
+
+    // Toast message components
+    lv_obj_t *toast_container;
+    lv_obj_t *toast_label;
+    lv_timer_t *toast_timer;
 
     ai_pet_state_t pet_state;
     ai_pet_menu_t current_menu;
@@ -110,6 +136,7 @@ static void show_food_menu(ai_pet_demo_t *demo);
 static void show_bath_menu(ai_pet_demo_t *demo);
 static void show_health_menu(ai_pet_demo_t *demo);
 static void show_sleep_menu(ai_pet_demo_t *demo);
+static void show_video_menu(ai_pet_demo_t *demo);
 static void hide_sub_menu(ai_pet_demo_t *demo);
 static void show_keyboard_for_pet_name(ai_pet_demo_t *demo);
 
@@ -140,6 +167,13 @@ static uint32_t find_action_items_start(void);
 static void create_stat_display_item(lv_obj_t *parent, const char *label, const char *value);
 static void highlight_first_sub_menu_item(ai_pet_demo_t *demo);
 static void create_sub_menu_with_items(ai_pet_demo_t *demo, const char *title, const char *symbols[], const char *items[], uint8_t item_count);
+
+// Toast Message Functions
+static void create_toast_message(ai_pet_demo_t *demo);
+static void show_toast_message(const char *message, uint32_t delay_ms);
+static void hide_toast_message(void);
+static void toast_timer_cb(lv_timer_t *timer);
+static void toast_anim_ready_cb(lv_anim_t *a);
 
 /**********************
  *  STATIC VARIABLES
@@ -179,6 +213,15 @@ static void create_main_screen(void)
 
     // Make sure the screen can receive keyboard focus
     lv_group_add_obj(lv_group_get_default(), demo_data.screen);
+
+    // Add horizontal line across the screen, 3px thick, positioned 1/3 from bottom
+    lv_obj_t *horizontal_line = lv_obj_create(demo_data.screen);
+    lv_obj_set_size(horizontal_line, AI_PET_SCREEN_WIDTH, 3);
+    lv_obj_align(horizontal_line, LV_ALIGN_TOP_LEFT, 0, 112); // 168 * (2/3) = 112 pixels from top
+    lv_obj_set_style_bg_color(horizontal_line, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(horizontal_line, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(horizontal_line, 0, 0);
+    lv_obj_set_style_pad_all(horizontal_line, 0, 0);
 }
 
 /**
@@ -209,6 +252,7 @@ void lv_demo_ai_pocket_pet(void)
     create_pet_area(&demo_data);
     create_bottom_menu(&demo_data);
     create_sub_menu(&demo_data);
+    create_toast_message(&demo_data);
 
     // Start pet animation timers
     start_animation_timers();
@@ -323,24 +367,38 @@ static void create_status_bar(ai_pet_demo_t *demo)
 static void create_pet_area(ai_pet_demo_t *demo)
 {
     demo->pet_area = lv_obj_create(demo->screen);
-    lv_obj_set_size(demo->pet_area, AI_PET_SCREEN_WIDTH, PET_AREA_HEIGHT);
+    // Use full screen height minus status bar and bottom menu
+    lv_obj_set_size(demo->pet_area, AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT - STATUS_BAR_HEIGHT - BOTTOM_MENU_HEIGHT);
     lv_obj_align(demo->pet_area, LV_ALIGN_TOP_MID, 0, STATUS_BAR_HEIGHT);
     lv_obj_set_style_bg_opa(demo->pet_area, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(demo->pet_area, 0, 0);
-    lv_obj_set_style_pad_all(demo->pet_area, 5, 0);
+    lv_obj_set_style_pad_all(demo->pet_area, 0, 0); // Remove padding to maximize space
 
-    // Create pet sprite
+    // Disable scrolling for pet area
+    lv_obj_clear_flag(demo->pet_area, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Create pet sprite container - sized to accommodate full GIF
     demo->pet_sprite = lv_obj_create(demo->pet_area);
-    lv_obj_set_size(demo->pet_sprite, 40, 40);
-    lv_obj_align(demo->pet_sprite, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(demo->pet_sprite, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(demo->pet_sprite, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(demo->pet_sprite, 20, 0);
+    // Use full width and height of the pet area to remove height constraints
+    lv_obj_set_size(demo->pet_sprite, AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT - STATUS_BAR_HEIGHT - BOTTOM_MENU_HEIGHT+3);
+    // Place the pet sprite higher by shifting it up (negative y offset)
+    lv_obj_align(demo->pet_sprite, LV_ALIGN_CENTER, 0, -5); // Move up by 5 pixels
+    lv_obj_set_style_bg_opa(demo->pet_sprite, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(demo->pet_sprite, 0, 0);
 
-    // Add pet label
-    lv_obj_t *pet_label = lv_label_create(demo->pet_sprite);
-    lv_label_set_text(pet_label, "🐾");
-    lv_obj_align(pet_label, LV_ALIGN_CENTER, 0, 0);
+    // Disable scrolling for pet sprite container
+    lv_obj_clear_flag(demo->pet_sprite, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Create pet image with ducky animation using GIF widget - full resolution
+    demo->pet_image = lv_gif_create(demo->pet_sprite);
+    lv_gif_set_src(demo->pet_image, &ducky_walk);
+    lv_obj_align(demo->pet_image, LV_ALIGN_CENTER, 0, 0);
+    // Don't set size - let it use natural GIF resolution
+
+    // Disable scrolling for the GIF widget
+    lv_obj_clear_flag(demo->pet_image, LV_OBJ_FLAG_SCROLLABLE);
+
+    printf("Ducky GIF animation loaded - full resolution: %dx%d\n", ducky_walk.header.w, ducky_walk.header.h);
 }
 
 /**
@@ -355,9 +413,14 @@ static void create_bottom_menu(ai_pet_demo_t *demo)
     lv_obj_set_style_border_width(demo->bottom_menu, 0, 0);
     lv_obj_set_style_pad_all(demo->bottom_menu, 2, 0);
 
-    const char *menu_symbols[] = {
-        LV_SYMBOL_DIRECTORY, LV_SYMBOL_EDIT, LV_SYMBOL_REFRESH,
-        LV_SYMBOL_POWER, LV_SYMBOL_CLOSE
+    // Custom menu icons - using image objects instead of symbols
+    const lv_img_dsc_t *menu_icons[] = {
+        &info_icon,
+        &eat_icon,
+        &toilet_icon,
+        &sick_icon,
+        &sleep_icon,
+        &camera_icon
     };
 
     for(int i = 0; i < MENU_BUTTON_COUNT; i++) {
@@ -374,11 +437,10 @@ static void create_bottom_menu(ai_pet_demo_t *demo)
         lv_obj_set_style_shadow_width(demo->menu_buttons[i], 0, 0);
         lv_obj_set_style_shadow_opa(demo->menu_buttons[i], LV_OPA_TRANSP, 0);
 
-        lv_obj_t *label = lv_label_create(demo->menu_buttons[i]);
-        lv_label_set_text(label, menu_symbols[i]);
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_text_color(label, lv_color_black(), 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+        // Custom icon buttons
+        lv_obj_t *img = lv_img_create(demo->menu_buttons[i]);
+        lv_img_set_src(img, menu_icons[i]);
+        lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
 
         lv_obj_add_event_cb(demo->menu_buttons[i], menu_button_event_cb, LV_EVENT_CLICKED, demo);
     }
@@ -424,15 +486,30 @@ static void create_sub_menu(ai_pet_demo_t *demo)
  */
 static void pet_animation_cb(lv_timer_t *timer)
 {
-    lv_color_t colors[] = {
-        lv_color_black(), // Idle
-        lv_color_black(), // Walking
-        lv_color_black(), // Eating
-        lv_color_black(), // Sleeping
-        lv_color_black()  // Playing
-    };
-
-    lv_obj_set_style_bg_color(demo_data.pet_sprite, colors[demo_data.pet_state], 0);
+    // The ducky GIF will animate automatically
+    // We can control visibility or other properties based on pet state
+    switch(demo_data.pet_state) {
+        case AI_PET_STATE_IDLE:
+            // Normal animation
+            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
+            break;
+        case AI_PET_STATE_WALKING:
+            // Walking animation (GIF handles this)
+            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
+            break;
+        case AI_PET_STATE_EATING:
+            // Eating state - could add eating animation later
+            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
+            break;
+        case AI_PET_STATE_SLEEPING:
+            // Sleeping state - could add sleeping animation later
+            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
+            break;
+        case AI_PET_STATE_PLAYING:
+            // Playing state - could add playing animation later
+            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
+            break;
+    }
 }
 
 /**
@@ -490,6 +567,9 @@ static void sub_menu_event_cb(lv_event_t *e)
                 if (action_index == 0) { // "Edit Pet Name" option
                     show_keyboard_for_pet_name(demo);
                 }
+                if (action_index == 1) {
+                    lv_demo_ai_pocket_pet_show_toast("Not supported yet", 2000);
+                }
                 break;
             }
         }
@@ -523,6 +603,9 @@ static void keyboard_callback(keyboard_result_t result, const char *text, void *
                 if (demo->current_menu == AI_PET_MENU_INFO) {
                     show_info_menu(demo);
                 }
+
+                // Show toast message confirming name change
+                lv_demo_ai_pocket_pet_show_toast("Pet name updated successfully!", 1500);
             }
             break;
 
@@ -622,6 +705,9 @@ static void handle_menu_selection(void)
         case 4: // Sleep
             show_sleep_menu(&demo_data);
             break;
+        case 5: // Video
+            show_video_menu(&demo_data);
+            break;
     }
 }
 
@@ -636,6 +722,9 @@ static void handle_sub_menu_selection(void)
 
         if (action_index == 0) {
             show_keyboard_for_pet_name(&demo_data);
+        }
+        if (action_index == 1) {
+            lv_demo_ai_pocket_pet_show_toast("Not supported yet", 500);
         }
     }
 }
@@ -664,6 +753,9 @@ static void handle_ai_function(void)
         printf("Pet stats updated - Health: %d, Hungry: %d, Happy: %d, Age: %d days, Weight: %.1f kg\n",
                demo_data.pet_stats.health, demo_data.pet_stats.hungry, demo_data.pet_stats.happy,
                demo_data.pet_stats.age_days, demo_data.pet_stats.weight_kg);
+
+        // Show toast message to confirm AI action
+        lv_demo_ai_pocket_pet_show_toast("AI function activated! Pet stats updated.", 2000);
     }
 }
 
@@ -812,6 +904,14 @@ static void show_sleep_menu(ai_pet_demo_t *demo)
 }
 
 /**
+ * Shows the video menu (currently not implemented)
+ */
+static void show_video_menu(ai_pet_demo_t *demo)
+{
+    // TODO: Add video stream for multimodal feature
+}
+
+/**
  * Hides the sub menu and returns to main menu
  */
 static void hide_sub_menu(ai_pet_demo_t *demo)
@@ -836,15 +936,39 @@ static void update_button_selection(uint8_t old_selection, uint8_t new_selection
     // Reset old button style
     lv_obj_set_style_bg_color(demo_data.menu_buttons[old_selection], lv_color_white(), 0);
     lv_obj_set_style_border_width(demo_data.menu_buttons[old_selection], 0, 0);
-    lv_obj_set_style_text_color(lv_obj_get_child(demo_data.menu_buttons[old_selection], 0), lv_color_black(), 0);
     lv_obj_set_style_shadow_width(demo_data.menu_buttons[old_selection], 0, 0);
+
+    // Handle old button content styling
+    lv_obj_t *old_child = lv_obj_get_child(demo_data.menu_buttons[old_selection], 0);
+    if (old_child) {
+        if (lv_obj_check_type(old_child, &lv_label_class)) {
+            lv_obj_set_style_text_color(old_child, lv_color_black(), 0);
+        } else if (lv_obj_check_type(old_child, &lv_image_class)) {
+            // Reset image styling for unselected state
+            lv_obj_set_style_img_recolor_opa(old_child, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_img_recolor(old_child, lv_color_black(), 0);
+            lv_obj_set_style_img_opa(old_child, LV_OPA_COVER, 0);
+        }
+    }
 
     // Set new button style
     lv_obj_set_style_bg_color(demo_data.menu_buttons[new_selection], lv_color_black(), 0);
     lv_obj_set_style_border_color(demo_data.menu_buttons[new_selection], lv_color_black(), 0);
     lv_obj_set_style_border_width(demo_data.menu_buttons[new_selection], 2, 0);
-    lv_obj_set_style_text_color(lv_obj_get_child(demo_data.menu_buttons[new_selection], 0), lv_color_white(), 0);
     lv_obj_set_style_shadow_width(demo_data.menu_buttons[new_selection], 0, 0);
+
+    // Handle new button content styling
+    lv_obj_t *new_child = lv_obj_get_child(demo_data.menu_buttons[new_selection], 0);
+    if (new_child) {
+        if (lv_obj_check_type(new_child, &lv_label_class)) {
+            lv_obj_set_style_text_color(new_child, lv_color_white(), 0);
+        } else if (lv_obj_check_type(new_child, &lv_image_class)) {
+            // Invert the image colors for selected state - black becomes white, white becomes black
+            lv_obj_set_style_img_recolor_opa(new_child, LV_OPA_COVER, 0);
+            lv_obj_set_style_img_recolor(new_child, lv_color_white(), 0);
+            lv_obj_set_style_img_opa(new_child, LV_OPA_COVER, 0);
+        }
+    }
 }
 
 /**
@@ -976,4 +1100,131 @@ static void create_sub_menu_with_items(ai_pet_demo_t *demo, const char *title,
     }
 
     highlight_first_sub_menu_item(demo);
+}
+
+/**
+ * Creates the toast message container and label
+ */
+static void create_toast_message(ai_pet_demo_t *demo)
+{
+    // Create toast container
+    demo->toast_container = lv_obj_create(demo->screen);
+    lv_obj_set_size(demo->toast_container, TOAST_MAX_WIDTH, TOAST_MIN_HEIGHT);
+    lv_obj_align(demo->toast_container, LV_ALIGN_CENTER, 0, 0);
+
+    // Style the toast container
+    lv_obj_set_style_bg_color(demo->toast_container, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(demo->toast_container, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(demo->toast_container, 2, 0);
+    lv_obj_set_style_border_color(demo->toast_container, lv_color_white(), 0);
+    lv_obj_set_style_radius(demo->toast_container, 10, 0);
+    lv_obj_set_style_pad_all(demo->toast_container, TOAST_PADDING, 0);
+    lv_obj_set_style_shadow_width(demo->toast_container, 10, 0);
+    lv_obj_set_style_shadow_color(demo->toast_container, lv_color_black(), 0);
+    lv_obj_set_style_shadow_opa(demo->toast_container, LV_OPA_50, 0);
+
+    // Create toast label
+    demo->toast_label = lv_label_create(demo->toast_container);
+    lv_label_set_text(demo->toast_label, "");
+    lv_obj_align(demo->toast_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_text_color(demo->toast_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(demo->toast_label, &lv_font_montserrat_14, 0);
+    lv_label_set_long_mode(demo->toast_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(demo->toast_label, TOAST_MAX_WIDTH - (TOAST_PADDING * 2));
+
+    // Move toast to top of screen (highest z-order)
+    lv_obj_move_foreground(demo->toast_container);
+
+    // Initially hide the toast
+    lv_obj_add_flag(demo->toast_container, LV_OBJ_FLAG_HIDDEN);
+
+    // Initialize timer to NULL
+    demo->toast_timer = NULL;
+}
+
+/**
+ * Shows a toast message with the given text and delay
+ */
+static void show_toast_message(const char *message, uint32_t delay_ms)
+{
+    printf("show_toast_message called with: '%s'\n", message);
+
+    // Hide any existing toast first
+    hide_toast_message();
+
+    // Set the message text
+    lv_label_set_text(demo_data.toast_label, message);
+
+    // Set a reasonable height for the toast container
+    // The label will wrap text automatically within the container
+    lv_obj_set_height(demo_data.toast_container, TOAST_MIN_HEIGHT);
+
+    // Move toast to top of screen (highest z-order)
+    lv_obj_move_foreground(demo_data.toast_container);
+
+    // Show the toast immediately (without animation for testing)
+    lv_obj_clear_flag(demo_data.toast_container, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_opa(demo_data.toast_container, LV_OPA_COVER, 0);
+    printf("Toast container shown, opacity set to COVER\n");
+
+    // Set up timer to hide the toast
+    if (delay_ms > 0) {
+        demo_data.toast_timer = lv_timer_create(toast_timer_cb, delay_ms, NULL);
+    }
+}
+
+/**
+ * Hides the toast message with animation
+ */
+static void hide_toast_message(void)
+{
+    printf("hide_toast_message called\n");
+
+    // Cancel existing timer
+    if (demo_data.toast_timer) {
+        lv_timer_del(demo_data.toast_timer);
+        demo_data.toast_timer = NULL;
+    }
+
+    // Hide immediately (without animation for testing)
+    lv_obj_add_flag(demo_data.toast_container, LV_OBJ_FLAG_HIDDEN);
+    printf("Toast container hidden\n");
+}
+
+/**
+ * Toast timer callback - hides the toast when timer expires
+ */
+static void toast_timer_cb(lv_timer_t *timer)
+{
+    hide_toast_message();
+}
+
+/**
+ * Toast animation ready callback - hides the toast container when animation completes
+ */
+static void toast_anim_ready_cb(lv_anim_t *a)
+{
+    lv_obj_add_flag(demo_data.toast_container, LV_OBJ_FLAG_HIDDEN);
+}
+
+/**
+ * Public function to show a toast message
+ * @param message The text message to display
+ * @param delay_ms How long to show the toast (in milliseconds)
+ */
+void lv_demo_ai_pocket_pet_show_toast(const char *message, uint32_t delay_ms)
+{
+    printf("Showing toast: '%s' for %d ms\n", message, delay_ms);
+    if (delay_ms == 0) {
+        delay_ms = TOAST_DEFAULT_DELAY;
+    }
+    show_toast_message(message, delay_ms);
+}
+
+/**
+ * Public function to hide the toast message immediately
+ */
+void lv_demo_ai_pocket_pet_hide_toast(void)
+{
+    hide_toast_message();
 }

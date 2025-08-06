@@ -66,6 +66,18 @@ void lv_demo_ai_pocket_pet(void);
  */
 void lv_demo_ai_pocket_pet_handle_input(uint32_t key);
 
+/**
+ * Show a toast message overlay
+ * @param message The text message to display
+ * @param delay_ms How long to show the toast (in milliseconds, 0 for default)
+ */
+void lv_demo_ai_pocket_pet_show_toast(const char *message, uint32_t delay_ms);
+
+/**
+ * Hide the toast message immediately
+ */
+void lv_demo_ai_pocket_pet_hide_toast(void);
+
 /**********************
  *      MACROS
  **********************/
