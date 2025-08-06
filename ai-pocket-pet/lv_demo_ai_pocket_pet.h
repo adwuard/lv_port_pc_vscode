@@ -42,6 +42,15 @@ typedef enum {
     AI_PET_MENU_SLEEP
 } ai_pet_menu_t;
 
+typedef struct {
+    uint8_t health;    // 0-100
+    uint8_t hungry;    // 0-100
+    uint8_t happy;     // 0-100
+    uint16_t age_days; // Age in days
+    float weight_kg;   // Weight in kg (decimal)
+    char name[16];     // Pet name
+} ai_pet_stats_t;
+
 /**********************
  * GLOBAL PROTOTYPES
  **********************/
@@ -65,4 +74,4 @@ void lv_demo_ai_pocket_pet_handle_input(uint32_t key);
 } /* extern "C" */
 #endif
 
-#endif /* LV_DEMO_AI_POCKET_PET_H */ 
+#endif /* LV_DEMO_AI_POCKET_PET_H */
