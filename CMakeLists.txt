@@ -94,6 +94,7 @@ else()
         ${PROJECT_SOURCE_DIR}/ai-pocket-pet/pet_area.c
         ${PROJECT_SOURCE_DIR}/ai-pocket-pet/menu_system.c
         ${PROJECT_SOURCE_DIR}/ai-pocket-pet/toast.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/startup_screen.c
     )
 endif()
 

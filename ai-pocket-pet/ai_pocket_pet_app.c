@@ -15,6 +15,7 @@
 #include "menu_system.h"
 #include "keyboard.h"
 #include "toast.h"
+#include "startup_screen.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +79,10 @@ void lv_demo_ai_pocket_pet(void)
     // Initialize keyboard widget
     keyboard_init();
 
-    // Create main screen
+    // Create startup screen first
+    startup_screen_create();
+
+    // Create main screen (but don't show it yet)
     create_main_screen();
 
     // Create UI components using modular approach
@@ -104,8 +108,8 @@ void lv_demo_ai_pocket_pet(void)
     lv_demo_ai_pocket_pet_set_wifi_strength(3);
     lv_demo_ai_pocket_pet_set_cellular_status(2, true);
 
-    // Show a toast message to indicate the demo is ready
-    lv_demo_ai_pocket_pet_show_toast("Network icons initialized!", 2000);
+    // Start timer to transition to main screen after 1 second
+    lv_timer_create(startup_screen_timer_cb, 1000, NULL);
 }
 
 void lv_demo_ai_pocket_pet_handle_input(uint32_t key)
@@ -304,7 +308,7 @@ static void create_main_screen(void)
     lv_obj_set_size(g_app_data.screen, AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT);
     lv_obj_set_style_bg_color(g_app_data.screen, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(g_app_data.screen, LV_OPA_COVER, 0);
-    lv_screen_load(g_app_data.screen);
+    // Note: We don't load this screen immediately - it will be loaded by the timer
 
     // Add keyboard event handler to the screen
     lv_obj_add_event_cb(g_app_data.screen, keyboard_event_cb, LV_EVENT_KEY, NULL);
