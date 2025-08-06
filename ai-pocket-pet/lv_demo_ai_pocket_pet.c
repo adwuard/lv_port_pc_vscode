@@ -101,6 +101,9 @@ void lv_demo_ai_pocket_pet(void)
     // Add keyboard event handler to the screen
     lv_obj_add_event_cb(demo_data.screen, keyboard_event_cb, LV_EVENT_KEY, NULL);
 
+    // Make sure the screen can receive keyboard focus
+    lv_group_add_obj(lv_group_get_default(), demo_data.screen);
+
     // Create UI components
     create_status_bar(&demo_data);
     create_pet_area(&demo_data);
@@ -136,6 +139,8 @@ void lv_demo_ai_pocket_pet_handle_input(uint32_t key)
                         lv_obj_set_style_bg_color(lv_obj_get_child(demo_data.sub_menu_list, demo_data.sub_menu_selection + 1), lv_color_white(), 0);
                         lv_obj_set_style_text_color(lv_obj_get_child(demo_data.sub_menu_list, demo_data.sub_menu_selection + 1), lv_color_black(), 0);
                     }
+                    // Scroll to the selected item
+                    lv_obj_scroll_to_view(lv_obj_get_child(demo_data.sub_menu_list, demo_data.sub_menu_selection), LV_ANIM_ON);
                 }
             }
             break;
@@ -159,31 +164,50 @@ void lv_demo_ai_pocket_pet_handle_input(uint32_t key)
                         lv_obj_set_style_bg_color(lv_obj_get_child(demo_data.sub_menu_list, demo_data.sub_menu_selection - 1), lv_color_white(), 0);
                         lv_obj_set_style_text_color(lv_obj_get_child(demo_data.sub_menu_list, demo_data.sub_menu_selection - 1), lv_color_black(), 0);
                     }
+                    // Scroll to the selected item
+                    lv_obj_scroll_to_view(lv_obj_get_child(demo_data.sub_menu_list, demo_data.sub_menu_selection), LV_ANIM_ON);
                 }
             }
             break;
 
                 case KEY_LEFT: // Left
             printf("LEFT key pressed - navigating left\n");
-            if(demo_data.current_menu == AI_PET_MENU_MAIN) {
-                // Navigate bottom menu
-                if(demo_data.selected_button > 0) {
-                    uint8_t old_selection = demo_data.selected_button;
-                    demo_data.selected_button--;
-                    update_button_selection(old_selection, demo_data.selected_button);
-                }
+            // Always navigate bottom menu regardless of current menu
+            if(demo_data.selected_button > 0) {
+                uint8_t old_selection = demo_data.selected_button;
+                demo_data.selected_button--;
+                update_button_selection(old_selection, demo_data.selected_button);
             }
             break;
 
                 case KEY_RIGHT: // Right
             printf("RIGHT key pressed - navigating right\n");
-            if(demo_data.current_menu == AI_PET_MENU_MAIN) {
-                // Navigate bottom menu
-                if(demo_data.selected_button < 4) {
-                    uint8_t old_selection = demo_data.selected_button;
-                    demo_data.selected_button++;
-                    update_button_selection(old_selection, demo_data.selected_button);
-                }
+            // Always navigate bottom menu regardless of current menu
+            if(demo_data.selected_button < 4) {
+                uint8_t old_selection = demo_data.selected_button;
+                demo_data.selected_button++;
+                update_button_selection(old_selection, demo_data.selected_button);
+            }
+            break;
+
+        // Additional key code handling for different systems
+        case 100: // 'd' key (alternative right)
+        case 68:  // 'D' key (alternative right)
+            printf("D key pressed - navigating right\n");
+            if(demo_data.selected_button < 4) {
+                uint8_t old_selection = demo_data.selected_button;
+                demo_data.selected_button++;
+                update_button_selection(old_selection, demo_data.selected_button);
+            }
+            break;
+
+        case 97:  // 'a' key (alternative left)
+        case 65:  // 'A' key (alternative left)
+            printf("A key pressed - navigating left\n");
+            if(demo_data.selected_button > 0) {
+                uint8_t old_selection = demo_data.selected_button;
+                demo_data.selected_button--;
+                update_button_selection(old_selection, demo_data.selected_button);
             }
             break;
 
@@ -224,6 +248,10 @@ void lv_demo_ai_pocket_pet_handle_input(uint32_t key)
             break;
         default:
             printf("Unhandled key: %d\n", key);
+            // Test if any key press is working
+            if(key > 0) {
+                printf("Key press detected but not handled: %d\n", key);
+            }
             break;
     }
 }
@@ -329,25 +357,27 @@ static void create_bottom_menu(ai_pet_demo_t *demo)
 static void create_sub_menu(ai_pet_demo_t *demo)
 {
     demo->sub_menu = lv_obj_create(demo->screen);
-    lv_obj_set_size(demo->sub_menu, AI_PET_SCREEN_WIDTH - 20, AI_PET_SCREEN_HEIGHT - 80);
-    lv_obj_align(demo->sub_menu, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_size(demo->sub_menu, AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT);
+    lv_obj_align(demo->sub_menu, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_set_style_bg_color(demo->sub_menu, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(demo->sub_menu, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(demo->sub_menu, 2, 0);
-    lv_obj_set_style_border_color(demo->sub_menu, lv_color_black(), 0);
-    lv_obj_set_style_radius(demo->sub_menu, 10, 0);
+    lv_obj_set_style_border_width(demo->sub_menu, 0, 0);
     lv_obj_set_style_pad_all(demo->sub_menu, 10, 0);
 
-    // Title
+    // Title at the top
     lv_obj_t *title = lv_label_create(demo->sub_menu);
     lv_label_set_text(title, "Menu");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(title, lv_color_black(), 0);
 
-    // List for sub menu items
+        // List for sub menu items - fill remaining space
     demo->sub_menu_list = lv_list_create(demo->sub_menu);
-    lv_obj_set_size(demo->sub_menu_list, AI_PET_SCREEN_WIDTH - 40, AI_PET_SCREEN_HEIGHT - 120);
-    lv_obj_align(demo->sub_menu_list, LV_ALIGN_CENTER, 0, 20);
+    lv_obj_set_size(demo->sub_menu_list, AI_PET_SCREEN_WIDTH - 20, AI_PET_SCREEN_HEIGHT - 60);
+    lv_obj_align(demo->sub_menu_list, LV_ALIGN_TOP_MID, 0, 40);
+
+    // Enable scroll UI for keyboard navigation
+    lv_obj_add_flag(demo->sub_menu_list, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_add_event_cb(demo->sub_menu_list, sub_menu_event_cb, LV_EVENT_CLICKED, demo);
 
@@ -409,22 +439,27 @@ static void show_info_menu(ai_pet_demo_t *demo)
     demo->current_menu = AI_PET_MENU_INFO;
     lv_obj_clear_flag(demo->sub_menu, LV_OBJ_FLAG_HIDDEN);
 
+    // Update title
+    lv_obj_t *title = lv_obj_get_child(demo->sub_menu, 0);
+    lv_label_set_text(title, "Pet Information");
+
     // Clear existing items
     lv_obj_clean(demo->sub_menu_list);
 
-    // Add info items
-    lv_list_add_text(demo->sub_menu_list, "Pet Information");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_FILE, "Name: AI Pet");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Age: 3 days");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_SETTINGS, "Happiness: 85%");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_SETTINGS, "Energy: 70%");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Health: 95%");
+    // Add actionable info items
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_FILE, "View Pet Profile");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Edit Pet Name");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_SETTINGS, "View Statistics");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_SETTINGS, "Check Status");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "View History");
 
     // Highlight first item
     demo->sub_menu_selection = 0;
     if(lv_obj_get_child_cnt(demo->sub_menu_list) > 0) {
         lv_obj_set_style_bg_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_black(), 0);
         lv_obj_set_style_text_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_white(), 0);
+        // Scroll to the first item
+        lv_obj_scroll_to_view(lv_obj_get_child(demo->sub_menu_list, 0), LV_ANIM_ON);
     }
 }
 
@@ -433,18 +468,24 @@ static void show_food_menu(ai_pet_demo_t *demo)
     demo->current_menu = AI_PET_MENU_FOOD;
     lv_obj_clear_flag(demo->sub_menu, LV_OBJ_FLAG_HIDDEN);
 
+    // Update title
+    lv_obj_t *title = lv_obj_get_child(demo->sub_menu, 0);
+    lv_label_set_text(title, "Food & Nutrition");
+
     lv_obj_clean(demo->sub_menu_list);
 
-    lv_list_add_text(demo->sub_menu_list, "Food Menu");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Dry Food");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Wet Food");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Treats");
-        lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Special Meal");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Feed Dry Food");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Feed Wet Food");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Give Treats");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Special Meal");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_EDIT, "Set Feeding Schedule");
 
     demo->sub_menu_selection = 0;
     if(lv_obj_get_child_cnt(demo->sub_menu_list) > 0) {
         lv_obj_set_style_bg_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_black(), 0);
         lv_obj_set_style_text_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_white(), 0);
+        // Scroll to the first item
+        lv_obj_scroll_to_view(lv_obj_get_child(demo->sub_menu_list, 0), LV_ANIM_ON);
     }
 }
 
@@ -453,18 +494,24 @@ static void show_bath_menu(ai_pet_demo_t *demo)
     demo->current_menu = AI_PET_MENU_BATH;
     lv_obj_clear_flag(demo->sub_menu, LV_OBJ_FLAG_HIDDEN);
 
+    // Update title
+    lv_obj_t *title = lv_obj_get_child(demo->sub_menu, 0);
+    lv_label_set_text(title, "Grooming & Care");
+
     lv_obj_clean(demo->sub_menu_list);
 
-    lv_list_add_text(demo->sub_menu_list, "Bath Options");
     lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Quick Wash");
     lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Full Bath");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Grooming");
-        lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Spa Treatment");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Brush Fur");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Spa Treatment");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_REFRESH, "Nail Trim");
 
     demo->sub_menu_selection = 0;
     if(lv_obj_get_child_cnt(demo->sub_menu_list) > 0) {
         lv_obj_set_style_bg_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_black(), 0);
         lv_obj_set_style_text_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_white(), 0);
+        // Scroll to the first item
+        lv_obj_scroll_to_view(lv_obj_get_child(demo->sub_menu_list, 0), LV_ANIM_ON);
     }
 }
 
@@ -473,18 +520,24 @@ static void show_health_menu(ai_pet_demo_t *demo)
     demo->current_menu = AI_PET_MENU_HEALTH;
     lv_obj_clear_flag(demo->sub_menu, LV_OBJ_FLAG_HIDDEN);
 
+    // Update title
+    lv_obj_t *title = lv_obj_get_child(demo->sub_menu, 0);
+    lv_label_set_text(title, "Health & Wellness");
+
     lv_obj_clean(demo->sub_menu_list);
 
-    lv_list_add_text(demo->sub_menu_list, "Health Care");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Check Up");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Health Check");
     lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Vaccination");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Medicine");
-        lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Exercise");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Give Medicine");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "Exercise Time");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_POWER, "View Health Records");
 
     demo->sub_menu_selection = 0;
     if(lv_obj_get_child_cnt(demo->sub_menu_list) > 0) {
         lv_obj_set_style_bg_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_black(), 0);
         lv_obj_set_style_text_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_white(), 0);
+        // Scroll to the first item
+        lv_obj_scroll_to_view(lv_obj_get_child(demo->sub_menu_list, 0), LV_ANIM_ON);
     }
 }
 
@@ -493,18 +546,24 @@ static void show_sleep_menu(ai_pet_demo_t *demo)
     demo->current_menu = AI_PET_MENU_SLEEP;
     lv_obj_clear_flag(demo->sub_menu, LV_OBJ_FLAG_HIDDEN);
 
+    // Update title
+    lv_obj_t *title = lv_obj_get_child(demo->sub_menu, 0);
+    lv_label_set_text(title, "Sleep & Rest");
+
     lv_obj_clean(demo->sub_menu_list);
 
-    lv_list_add_text(demo->sub_menu_list, "Sleep Options");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Nap Time");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Deep Sleep");
-    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Bedtime");
-        lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Wake Up");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Put to Sleep");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Wake Up Pet");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Set Bedtime");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Sleep Schedule");
+    lv_list_add_btn(demo->sub_menu_list, LV_SYMBOL_CLOSE, "Sleep Quality");
 
     demo->sub_menu_selection = 0;
     if(lv_obj_get_child_cnt(demo->sub_menu_list) > 0) {
         lv_obj_set_style_bg_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_black(), 0);
         lv_obj_set_style_text_color(lv_obj_get_child(demo->sub_menu_list, 0), lv_color_white(), 0);
+        // Scroll to the first item
+        lv_obj_scroll_to_view(lv_obj_get_child(demo->sub_menu_list, 0), LV_ANIM_ON);
     }
 }
 
@@ -533,5 +592,6 @@ static void update_button_selection(uint8_t old_selection, uint8_t new_selection
 static void keyboard_event_cb(lv_event_t *e)
 {
     uint32_t key = lv_event_get_key(e);
+    printf("Keyboard event received: key=%d\n", key);
     lv_demo_ai_pocket_pet_handle_input(key);
 }
