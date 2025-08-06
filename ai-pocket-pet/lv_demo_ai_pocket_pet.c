@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 // Custom menu icons
 #include "data/icons/menu_info_icon.c"
@@ -26,7 +27,11 @@
 
 // Pet animation
 #include "data/ducky/ducky_walk.c"
+#include "data/ducky/ducky_walk_to_left.c"
+#include "data/ducky/ducky_blink.c"
 LV_IMG_DECLARE(ducky_walk);
+LV_IMG_DECLARE(ducky_walk_to_left);
+LV_IMG_DECLARE(ducky_blink);
 
 /*********************
  *      DEFINES
@@ -66,9 +71,14 @@ LV_IMG_DECLARE(ducky_walk);
 #define LV_IMG_DECLARE(var_name) extern const lv_image_dsc_t var_name;
 // Pet animation constants
 #define PET_ANIMATION_INTERVAL 20
-#define PET_MOVEMENT_INTERVAL 20  // Move more frequently (was 3000)
-#define PET_MOVEMENT_STEP 1        // Move a larger step (was 10)
-#define PET_MOVEMENT_LIMIT 100      // Reduced for larger GIF
+#define PET_MOVEMENT_INTERVAL 50   // Natural movement timing
+#define PET_MOVEMENT_STEP 2        // Smooth movement step
+#define PET_MOVEMENT_LIMIT 80      // Movement boundaries
+#define PET_BLINK_INTERVAL 3000    // Blink every 3 seconds
+#define PET_WALK_DURATION_MIN 2000 // Minimum walk duration (ms)
+#define PET_WALK_DURATION_MAX 8000 // Maximum walk duration (ms)
+#define PET_IDLE_DURATION_MIN 3000 // Minimum idle duration (ms)
+#define PET_IDLE_DURATION_MAX 10000 // Maximum idle duration (ms)
 
 // Pet stats constants
 #define MAX_STAT_VALUE 100
@@ -87,8 +97,10 @@ typedef struct {
     lv_obj_t *network_icon;
     lv_obj_t *battery_icon;
     lv_obj_t *pet_area;
-    lv_obj_t *pet_sprite;
-    lv_obj_t *pet_image;
+    lv_obj_t *pet_image_walk;
+    lv_obj_t *pet_image_walk_left;
+    lv_obj_t *pet_image_blink;
+    lv_obj_t *current_pet_image; // Points to the currently active image
     lv_obj_t *bottom_menu;
     lv_obj_t *menu_buttons[MENU_BUTTON_COUNT];
     lv_obj_t *sub_menu;
@@ -108,6 +120,13 @@ typedef struct {
 
     lv_timer_t *pet_animation_timer;
     lv_timer_t *pet_movement_timer;
+
+    // Pet movement state
+    int16_t pet_x_pos;
+    int8_t pet_direction;  // 1 = right, -1 = left
+    uint32_t pet_state_timer;
+    uint32_t pet_state_duration;
+    bool pet_is_walking;
 } ai_pet_demo_t;
 
 /**********************
@@ -123,6 +142,8 @@ static void create_sub_menu(ai_pet_demo_t *demo);
 // Animation Functions
 static void pet_animation_cb(lv_timer_t *timer);
 static void pet_movement_cb(lv_timer_t *timer);
+
+static void switch_pet_animation(lv_obj_t *new_animation);
 
 // Event Handler Functions
 static void menu_button_event_cb(lv_event_t *e);
@@ -194,6 +215,11 @@ static void init_demo_data(void)
     demo_data.current_menu = AI_PET_MENU_MAIN;
     demo_data.selected_button = 0;
     demo_data.sub_menu_selection = 0;
+    demo_data.pet_x_pos = 0;
+    demo_data.pet_direction = 1;  // Start facing right
+    demo_data.pet_is_walking = false;
+    demo_data.pet_state_timer = 0;
+    demo_data.pet_state_duration = PET_IDLE_DURATION_MIN + (rand() % (PET_IDLE_DURATION_MAX - PET_IDLE_DURATION_MIN));
     init_pet_stats(&demo_data.pet_stats);
 }
 
@@ -216,7 +242,7 @@ static void create_main_screen(void)
 
     // Add horizontal line across the screen, 3px thick, positioned 1/3 from bottom
     lv_obj_t *horizontal_line = lv_obj_create(demo_data.screen);
-    lv_obj_set_size(horizontal_line, AI_PET_SCREEN_WIDTH, 3);
+    lv_obj_set_size(horizontal_line, AI_PET_SCREEN_WIDTH, 2);
     lv_obj_align(horizontal_line, LV_ALIGN_TOP_LEFT, 0, 112); // 168 * (2/3) = 112 pixels from top
     lv_obj_set_style_bg_color(horizontal_line, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(horizontal_line, LV_OPA_COVER, 0);
@@ -238,6 +264,9 @@ static void start_animation_timers(void)
  */
 void lv_demo_ai_pocket_pet(void)
 {
+    // Initialize random seed for natural movement
+    srand(time(NULL));
+
     // Initialize demo data
     init_demo_data();
 
@@ -377,26 +406,46 @@ static void create_pet_area(ai_pet_demo_t *demo)
     // Disable scrolling for pet area
     lv_obj_clear_flag(demo->pet_area, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Create pet sprite container - sized to accommodate full GIF
-    demo->pet_sprite = lv_obj_create(demo->pet_area);
-    // Use full width and height of the pet area to remove height constraints
-    lv_obj_set_size(demo->pet_sprite, AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT - STATUS_BAR_HEIGHT - BOTTOM_MENU_HEIGHT+3);
-    // Place the pet sprite higher by shifting it up (negative y offset)
-    lv_obj_align(demo->pet_sprite, LV_ALIGN_CENTER, 0, -5); // Move up by 5 pixels
-    lv_obj_set_style_bg_opa(demo->pet_sprite, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(demo->pet_sprite, 0, 0);
+    // Create a container for the GIF widgets to constrain rendering area
+    lv_obj_t *gif_container = lv_obj_create(demo->pet_area);
+    lv_obj_set_size(gif_container, 159, 164); // Exact GIF dimensions
+    lv_obj_align(gif_container, LV_ALIGN_CENTER, 0, -5); // Center with slight upward offset
+    lv_obj_set_style_bg_opa(gif_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(gif_container, 0, 0);
+    lv_obj_set_style_pad_all(gif_container, 0, 0);
+    lv_obj_clear_flag(gif_container, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Disable scrolling for pet sprite container
-    lv_obj_clear_flag(demo->pet_sprite, LV_OBJ_FLAG_SCROLLABLE);
+        // Create three separate GIF widgets for smooth animation transitions
+    // This prevents black flashing by avoiding source switching
 
-    // Create pet image with ducky animation using GIF widget - full resolution
-    demo->pet_image = lv_gif_create(demo->pet_sprite);
-    lv_gif_set_src(demo->pet_image, &ducky_walk);
-    lv_obj_align(demo->pet_image, LV_ALIGN_CENTER, 0, 0);
-    // Don't set size - let it use natural GIF resolution
+    // Walk right animation
+    demo->pet_image_walk = lv_gif_create(gif_container);
+    lv_gif_set_src(demo->pet_image_walk, &ducky_walk);
+    lv_obj_align(demo->pet_image_walk, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(demo->pet_image_walk, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(demo->pet_image_walk, 159, 164);
+    lv_obj_set_style_bg_opa(demo->pet_image_walk, LV_OPA_TRANSP, 0);
 
-    // Disable scrolling for the GIF widget
-    lv_obj_clear_flag(demo->pet_image, LV_OBJ_FLAG_SCROLLABLE);
+    // Walk left animation
+    demo->pet_image_walk_left = lv_gif_create(gif_container);
+    lv_gif_set_src(demo->pet_image_walk_left, &ducky_walk_to_left);
+    lv_obj_align(demo->pet_image_walk_left, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(demo->pet_image_walk_left, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(demo->pet_image_walk_left, 159, 164);
+    lv_obj_set_style_bg_opa(demo->pet_image_walk_left, LV_OPA_TRANSP, 0);
+
+    // Blink animation
+    demo->pet_image_blink = lv_gif_create(gif_container);
+    lv_gif_set_src(demo->pet_image_blink, &ducky_blink);
+    lv_obj_align(demo->pet_image_blink, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(demo->pet_image_blink, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(demo->pet_image_blink, 159, 164);
+    lv_obj_set_style_bg_opa(demo->pet_image_blink, LV_OPA_TRANSP, 0);
+
+    // Set initial active image and hide others
+    demo->current_pet_image = demo->pet_image_blink;
+    lv_obj_add_flag(demo->pet_image_walk, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(demo->pet_image_walk_left, LV_OBJ_FLAG_HIDDEN);
 
     printf("Ducky GIF animation loaded - full resolution: %dx%d\n", ducky_walk.header.w, ducky_walk.header.h);
 }
@@ -482,51 +531,111 @@ static void create_sub_menu(ai_pet_demo_t *demo)
 }
 
 /**
- * Pet animation callback - changes pet appearance based on state
+ * Pet animation callback - manages pet state and animations
  */
 static void pet_animation_cb(lv_timer_t *timer)
 {
-    // The ducky GIF will animate automatically
-    // We can control visibility or other properties based on pet state
-    switch(demo_data.pet_state) {
-        case AI_PET_STATE_IDLE:
-            // Normal animation
-            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
-            break;
-        case AI_PET_STATE_WALKING:
-            // Walking animation (GIF handles this)
-            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
-            break;
-        case AI_PET_STATE_EATING:
-            // Eating state - could add eating animation later
-            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
-            break;
-        case AI_PET_STATE_SLEEPING:
-            // Sleeping state - could add sleeping animation later
-            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
-            break;
-        case AI_PET_STATE_PLAYING:
-            // Playing state - could add playing animation later
-            lv_obj_clear_flag(demo_data.pet_image, LV_OBJ_FLAG_HIDDEN);
-            break;
+    // The GIF animations are handled by the movement system
+    // This callback can be used for additional pet state management
+
+    // Ensure pet is always visible
+    lv_obj_clear_flag(demo_data.current_pet_image, LV_OBJ_FLAG_HIDDEN);
+
+    // Update pet state based on movement system
+    if (demo_data.pet_is_walking) {
+        demo_data.pet_state = AI_PET_STATE_WALKING;
+    } else {
+        demo_data.pet_state = AI_PET_STATE_IDLE;
     }
 }
 
 /**
- * Pet movement callback - simple horizontal movement
+ * Pet movement callback - natural movement with walking and idle states
  */
 static void pet_movement_cb(lv_timer_t *timer)
 {
-    static int8_t direction = 1;
-    static int16_t x_pos = 0;
+    // Update state timer
+    demo_data.pet_state_timer += PET_MOVEMENT_INTERVAL;
 
-    x_pos += direction * PET_MOVEMENT_STEP;
-    if(x_pos > PET_MOVEMENT_LIMIT || x_pos < -PET_MOVEMENT_LIMIT) {
-        direction *= -1;
+    // Check if it's time to change state
+    if (demo_data.pet_state_timer >= demo_data.pet_state_duration) {
+        // Switch between walking and idle
+        demo_data.pet_is_walking = !demo_data.pet_is_walking;
+
+                                                if (demo_data.pet_is_walking) {
+            // Start walking - choose random direction and duration
+            demo_data.pet_direction = (rand() % 2) ? 1 : -1;
+            demo_data.pet_state_duration = PET_WALK_DURATION_MIN + (rand() % (PET_WALK_DURATION_MAX - PET_WALK_DURATION_MIN));
+
+
+
+                        // Set appropriate animation based on direction
+            if (demo_data.pet_direction == 1) {
+                switch_pet_animation(demo_data.pet_image_walk);
+            } else {
+                switch_pet_animation(demo_data.pet_image_walk_left);
+            }
+        } else {
+            // Start idle - choose random duration
+            demo_data.pet_state_duration = PET_IDLE_DURATION_MIN + (rand() % (PET_IDLE_DURATION_MAX - PET_IDLE_DURATION_MIN));
+
+
+
+                        // Use blink animation when idle
+            switch_pet_animation(demo_data.pet_image_blink);
+        }
+
+        demo_data.pet_state_timer = 0;
     }
 
-    lv_obj_set_x(demo_data.pet_sprite, x_pos);
+        // Move pet if walking
+    if (demo_data.pet_is_walking) {
+        demo_data.pet_x_pos += demo_data.pet_direction * PET_MOVEMENT_STEP;
+
+        // Bounce off boundaries
+        if (demo_data.pet_x_pos > PET_MOVEMENT_LIMIT) {
+            demo_data.pet_x_pos = PET_MOVEMENT_LIMIT;
+            demo_data.pet_direction = -1;
+            switch_pet_animation(demo_data.pet_image_walk_left);
+        } else if (demo_data.pet_x_pos < -PET_MOVEMENT_LIMIT) {
+            demo_data.pet_x_pos = -PET_MOVEMENT_LIMIT;
+            demo_data.pet_direction = 1;
+            switch_pet_animation(demo_data.pet_image_walk);
+        }
+    } else {
+        // Pet is idle - stays at current position
+        // Animation is already set to blink in the state change logic
+    }
+
+    // Update pet position - move the container that holds the GIF widgets
+    lv_obj_t *gif_container = lv_obj_get_parent(demo_data.current_pet_image);
+    if (gif_container) {
+        lv_obj_set_x(gif_container, demo_data.pet_x_pos);
+    }
+
+
 }
+
+
+
+/**
+ * Helper function to switch pet animations smoothly
+ */
+static void switch_pet_animation(lv_obj_t *new_animation)
+{
+    // Hide current animation
+    lv_obj_add_flag(demo_data.current_pet_image, LV_OBJ_FLAG_HIDDEN);
+
+    // Show new animation
+    demo_data.current_pet_image = new_animation;
+    lv_obj_clear_flag(new_animation, LV_OBJ_FLAG_HIDDEN);
+}
+
+
+
+
+
+
 
 /**
  * Menu button click event handler
