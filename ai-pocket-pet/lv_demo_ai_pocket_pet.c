@@ -25,6 +25,30 @@
 #include "data/icons/menu_toilet_icon.c"
 #include "data/icons/menu_camera_icon.c"
 
+// Network status icons
+#include "data/icons/wifi_1_bar_icon.c"
+#include "data/icons/wifi_2_bar_icon.c"
+#include "data/icons/wifi_3_bar_icon.c"
+#include "data/icons/wifi_off_icon.c"
+#include "data/icons/wifi_find_icon.c"
+#include "data/icons/wifi_add_icon.c"
+#include "data/icons/4g_logo_icon.c"
+#include "data/icons/cellular_1_bar_icon.c"
+#include "data/icons/cellular_2_bar_icon.c"
+#include "data/icons/cellular_3_bar_icon.c"
+#include "data/icons/cellular_off_icon.c"
+#include "data/icons/cellular_connected_no_internet_icon.c"
+
+// Battery icons
+#include "data/icons/battery_0_icon.c"
+#include "data/icons/battery_1_icon.c"
+#include "data/icons/battery_2_icon.c"
+#include "data/icons/battery_3_icon.c"
+#include "data/icons/battery_4_icon.c"
+#include "data/icons/battery_5_icon.c"
+#include "data/icons/battery_full_icon.c"
+#include "data/icons/battery_charging_icon.c"
+
 // Pet animation
 #include "data/ducky/ducky_walk.c"
 #include "data/ducky/ducky_walk_to_left.c"
@@ -33,10 +57,34 @@ LV_IMG_DECLARE(ducky_walk);
 LV_IMG_DECLARE(ducky_walk_to_left);
 LV_IMG_DECLARE(ducky_blink);
 
+// Network status icon declarations
+LV_IMG_DECLARE(wifi_1_bar_icon);
+LV_IMG_DECLARE(wifi_2_bar_icon);
+LV_IMG_DECLARE(wifi_3_bar_icon);
+LV_IMG_DECLARE(wifi_off_icon);
+LV_IMG_DECLARE(wifi_find_icon);
+LV_IMG_DECLARE(wifi_add_icon);
+LV_IMG_DECLARE(four_g_logo_icon);
+LV_IMG_DECLARE(cellular_1_bar_icon);
+LV_IMG_DECLARE(cellular_2_bar_icon);
+LV_IMG_DECLARE(cellular_3_bar_icon);
+LV_IMG_DECLARE(cellular_off_icon);
+LV_IMG_DECLARE(cellular_connected_no_internet_icon);
+
+// Battery icon declarations
+LV_IMG_DECLARE(battery_0_icon);
+LV_IMG_DECLARE(battery_1_icon);
+LV_IMG_DECLARE(battery_2_icon);
+LV_IMG_DECLARE(battery_3_icon);
+LV_IMG_DECLARE(battery_4_icon);
+LV_IMG_DECLARE(battery_5_icon);
+LV_IMG_DECLARE(battery_full_icon);
+LV_IMG_DECLARE(battery_charging_icon);
+
 /*********************
  *      DEFINES
  *********************/
-#define STATUS_BAR_HEIGHT 20
+#define STATUS_BAR_HEIGHT 24
 #define BOTTOM_MENU_HEIGHT 26
 #define PET_AREA_HEIGHT (AI_PET_SCREEN_HEIGHT - STATUS_BAR_HEIGHT - BOTTOM_MENU_HEIGHT)
 
@@ -50,8 +98,8 @@ LV_IMG_DECLARE(ducky_blink);
 // UI Constants
 #define MENU_BUTTON_COUNT 6
 #define MENU_BUTTON_SIZE 24
-#define MENU_BUTTON_SPACING 25
-#define MENU_BUTTON_START_X (AI_PET_SCREEN_WIDTH - 250)
+#define MENU_BUTTON_SPACING 30
+#define MENU_BUTTON_START_X (AI_PET_SCREEN_WIDTH - 225)
 #define SUB_MENU_PADDING 10
 #define SUB_MENU_TITLE_OFFSET 10
 #define SUB_MENU_LIST_OFFSET 40
@@ -94,6 +142,7 @@ typedef struct {
     lv_obj_t *screen;
     lv_obj_t *status_bar;
     lv_obj_t *wifi_icon;
+    lv_obj_t *four_g_logo_icon;
     lv_obj_t *network_icon;
     lv_obj_t *battery_icon;
     lv_obj_t *pet_area;
@@ -127,6 +176,15 @@ typedef struct {
     uint32_t pet_state_timer;
     uint32_t pet_state_duration;
     bool pet_is_walking;
+
+    // Network status tracking
+    uint8_t wifi_signal_strength;  // 0 = off, 1-3 = bars, 4 = find, 5 = add
+    uint8_t cellular_signal_strength;  // 0 = off, 1-3 = bars, 4 = no internet
+    bool cellular_connected;
+
+    // Battery status tracking
+    uint8_t battery_level;  // 0-6 (0 = empty, 5 = 5 bars, 6 = full)
+    bool battery_charging;
 } ai_pet_demo_t;
 
 /**********************
@@ -195,6 +253,17 @@ static void show_toast_message(const char *message, uint32_t delay_ms);
 static void hide_toast_message(void);
 static void toast_timer_cb(lv_timer_t *timer);
 static void toast_anim_ready_cb(lv_anim_t *a);
+
+// Network status functions
+static void update_wifi_icon(ai_pet_demo_t *demo, uint8_t signal_strength);
+static void update_cellular_icon(ai_pet_demo_t *demo, uint8_t signal_strength, bool connected);
+static void update_network_status_bar(ai_pet_demo_t *demo);
+static const lv_img_dsc_t* get_wifi_icon_by_strength(uint8_t strength);
+static const lv_img_dsc_t* get_cellular_icon_by_strength(uint8_t strength, bool connected);
+
+// Battery status functions
+static void update_battery_icon(ai_pet_demo_t *demo, uint8_t level, bool charging);
+static const lv_img_dsc_t* get_battery_icon_by_level(uint8_t level, bool charging);
 
 /**********************
  *  STATIC VARIABLES
@@ -285,6 +354,16 @@ void lv_demo_ai_pocket_pet(void)
 
     // Start pet animation timers
     start_animation_timers();
+
+    // Test network status icons - demonstrate different states
+    printf("Initializing network status icons...\n");
+
+    // Set initial WiFi to 3 bars and cellular to 2 bars with connection
+    lv_demo_ai_pocket_pet_set_wifi_strength(3);
+    lv_demo_ai_pocket_pet_set_cellular_status(2, true);
+
+    // Show a toast message to indicate the demo is ready
+    lv_demo_ai_pocket_pet_show_toast("Network icons initialized!", 2000);
 }
 
 void lv_demo_ai_pocket_pet_handle_input(uint32_t key)
@@ -346,6 +425,55 @@ void lv_demo_ai_pocket_pet_handle_input(uint32_t key)
             handle_ai_function();
             break;
 
+        // Battery icon testing keys only
+        case 97: // 'a' key - Battery 0 (empty)
+            printf("A key pressed - Setting battery to empty\n");
+            lv_demo_ai_pocket_pet_set_battery_status(0, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: Empty", 1000);
+            break;
+
+        case 115: // 's' key - Battery 1
+            printf("S key pressed - Setting battery to 1 bar\n");
+            lv_demo_ai_pocket_pet_set_battery_status(1, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: 1 bar", 1000);
+            break;
+
+        case 100: // 'd' key - Battery 2
+            printf("D key pressed - Setting battery to 2 bars\n");
+            lv_demo_ai_pocket_pet_set_battery_status(2, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: 2 bars", 1000);
+            break;
+
+        case 102: // 'f' key - Battery 3
+            printf("F key pressed - Setting battery to 3 bars\n");
+            lv_demo_ai_pocket_pet_set_battery_status(3, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: 3 bars", 1000);
+            break;
+
+        case 103: // 'g' key - Battery 4
+            printf("G key pressed - Setting battery to 4 bars\n");
+            lv_demo_ai_pocket_pet_set_battery_status(4, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: 4 bars", 1000);
+            break;
+
+        case 104: // 'h' key - Battery 5 (5 bars)
+            printf("H key pressed - Setting battery to 5 bars\n");
+            lv_demo_ai_pocket_pet_set_battery_status(5, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: 5 bars", 1000);
+            break;
+
+        case 106: // 'j' key - Battery 6 (full)
+            printf("J key pressed - Setting battery to full\n");
+            lv_demo_ai_pocket_pet_set_battery_status(6, false);
+            lv_demo_ai_pocket_pet_show_toast("Battery: Full", 1000);
+            break;
+
+        case 99: // 'c' key - Battery charging
+            printf("C key pressed - Setting battery to charging\n");
+            lv_demo_ai_pocket_pet_set_battery_status(3, true);
+            lv_demo_ai_pocket_pet_show_toast("Battery: Charging", 1000);
+            break;
+
         default:
             printf("Unhandled key: %d\n", key);
             if(key > 0) {
@@ -371,23 +499,42 @@ static void create_status_bar(ai_pet_demo_t *demo)
     lv_obj_set_style_border_width(demo->status_bar, 0, 0);
     lv_obj_set_style_pad_all(demo->status_bar, 2, 0);
 
-    // WiFi icon
-    demo->wifi_icon = lv_label_create(demo->status_bar);
-    lv_label_set_text(demo->wifi_icon, LV_SYMBOL_WIFI);
+    // Disable scrolling for status bar
+    lv_obj_clear_flag(demo->status_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    // WiFi icon (image widget)
+    demo->wifi_icon = lv_img_create(demo->status_bar);
+    lv_obj_set_size(demo->wifi_icon, 24, 24);
     lv_obj_align(demo->wifi_icon, LV_ALIGN_LEFT_MID, 5, 0);
-    lv_obj_set_style_text_color(demo->wifi_icon, lv_color_black(), 0);
 
-    // Network icon (4G)
-    demo->network_icon = lv_label_create(demo->status_bar);
-    lv_label_set_text(demo->network_icon, "4G");
-    lv_obj_align(demo->network_icon, LV_ALIGN_LEFT_MID, 30, 0);
-    lv_obj_set_style_text_color(demo->network_icon, lv_color_black(), 0);
+    // 4G logo icon (static, 24px) -- moved before cellular icon
+    demo->four_g_logo_icon = lv_img_create(demo->status_bar);
+    lv_obj_set_size(demo->four_g_logo_icon, 24, 24);
+    lv_obj_align(demo->four_g_logo_icon, LV_ALIGN_LEFT_MID, 35, 0);
+    lv_img_set_src(demo->four_g_logo_icon, &four_g_logo_icon);
 
-    // Battery icon
-    demo->battery_icon = lv_label_create(demo->status_bar);
-    lv_label_set_text(demo->battery_icon, LV_SYMBOL_BATTERY_FULL);
+    // Network icon (cellular signal) -- moved after 4G icon
+    demo->network_icon = lv_img_create(demo->status_bar);
+    lv_obj_set_size(demo->network_icon, 24, 24);
+    lv_obj_align(demo->network_icon, LV_ALIGN_LEFT_MID, 55, 0);
+
+    // Battery icon (image widget)
+    demo->battery_icon = lv_img_create(demo->status_bar);
+    lv_obj_set_size(demo->battery_icon, 24, 24);
     lv_obj_align(demo->battery_icon, LV_ALIGN_RIGHT_MID, -5, 0);
-    lv_obj_set_style_text_color(demo->battery_icon, lv_color_black(), 0);
+
+    // Initialize network status
+    demo->wifi_signal_strength = 4;  // Default to not connected
+    demo->cellular_signal_strength = 4;  // Default to not connected
+    demo->cellular_connected = false;    // Default to not connected
+
+    // Initialize battery status
+    demo->battery_level = 5;  // Default to full battery
+    demo->battery_charging = false;  // Default to not charging
+
+    // Set initial icons
+    update_network_status_bar(demo);
+    update_battery_icon(demo, demo->battery_level, demo->battery_charging);
 }
 
 /**
@@ -940,8 +1087,8 @@ static void create_actions_section(void)
     // Add action buttons
     lv_list_add_btn(demo_data.sub_menu_list, LV_SYMBOL_EDIT, "Edit Pet Name");
     lv_list_add_btn(demo_data.sub_menu_list, LV_SYMBOL_SETTINGS, "View Statistics");
-    lv_list_add_btn(demo_data.sub_menu_list, LV_SYMBOL_EDIT, "View Pet History");
-    lv_list_add_btn(demo_data.sub_menu_list, LV_SYMBOL_EDIT, "DEV: Randomize STAT Data");
+    lv_list_add_btn(demo_data.sub_menu_list, LV_SYMBOL_EDIT, "WIFI Settings");
+    lv_list_add_btn(demo_data.sub_menu_list, LV_SYMBOL_EDIT, "DEV:Randomize Pet Data");
 }
 
 /**
@@ -974,7 +1121,7 @@ static void show_info_menu(ai_pet_demo_t *demo)
 static void show_food_menu(ai_pet_demo_t *demo)
 {
     const char *symbols[] = {LV_SYMBOL_EDIT, LV_SYMBOL_EDIT, LV_SYMBOL_EDIT, LV_SYMBOL_EDIT, LV_SYMBOL_EDIT};
-    const char *items[] = {"Feed Dry Food", "Feed Wet Food", "Give Treats", "Special Meal", "Set Feeding Schedule"};
+    const char *items[] = {"Feed Hamberger", "Drink Water"};
 
     create_sub_menu_with_items(demo, "Food & Nutrition", symbols, items, 5);
 }
@@ -1336,4 +1483,225 @@ void lv_demo_ai_pocket_pet_show_toast(const char *message, uint32_t delay_ms)
 void lv_demo_ai_pocket_pet_hide_toast(void)
 {
     hide_toast_message();
+}
+
+/**
+ * Updates the WiFi icon based on signal strength
+ * @param demo Pointer to the demo data
+ * @param signal_strength 0 = off, 1-3 = bars, 4 = find, 5 = add
+ */
+static void update_wifi_icon(ai_pet_demo_t *demo, uint8_t signal_strength)
+{
+    const lv_img_dsc_t* icon = get_wifi_icon_by_strength(signal_strength);
+    if (icon) {
+        lv_img_set_src(demo->wifi_icon, icon);
+    }
+    demo->wifi_signal_strength = signal_strength;
+}
+
+/**
+ * Updates the cellular icon based on signal strength and connection status
+ * @param demo Pointer to the demo data
+ * @param signal_strength 0 = off, 1-3 = bars, 4 = no internet
+ * @param connected Whether cellular is connected to internet
+ */
+static void update_cellular_icon(ai_pet_demo_t *demo, uint8_t signal_strength, bool connected)
+{
+    const lv_img_dsc_t* icon = get_cellular_icon_by_strength(signal_strength, connected);
+    if (icon) {
+        lv_img_set_src(demo->network_icon, icon);
+    }
+    demo->cellular_signal_strength = signal_strength;
+    demo->cellular_connected = connected;
+}
+
+/**
+ * Updates the entire network status bar with current WiFi and cellular status
+ * @param demo Pointer to the demo data
+ */
+static void update_network_status_bar(ai_pet_demo_t *demo)
+{
+    update_wifi_icon(demo, demo->wifi_signal_strength);
+    update_cellular_icon(demo, demo->cellular_signal_strength, demo->cellular_connected);
+}
+
+/**
+ * Returns the appropriate WiFi icon based on signal strength
+ * @param strength 0 = off, 1-3 = bars, 4 = find, 5 = add
+ * @return Pointer to the appropriate icon image descriptor
+ */
+static const lv_img_dsc_t* get_wifi_icon_by_strength(uint8_t strength)
+{
+    switch (strength) {
+        case 0:
+            return &wifi_off_icon;
+        case 1:
+            return &wifi_1_bar_icon;
+        case 2:
+            return &wifi_2_bar_icon;
+        case 3:
+            return &wifi_3_bar_icon;
+        case 4:
+            return &wifi_find_icon;
+        case 5:
+            return &wifi_add_icon;
+        default:
+            return &wifi_off_icon;
+    }
+}
+
+/**
+ * Returns the appropriate cellular icon based on signal strength and connection status
+ * @param strength 0 = off, 1-3 = bars, 4 = no internet
+ * @param connected Whether cellular is connected to internet
+ * @return Pointer to the appropriate icon image descriptor
+ */
+static const lv_img_dsc_t* get_cellular_icon_by_strength(uint8_t strength, bool connected)
+{
+    if (strength == 0) {
+        return &cellular_off_icon;
+    }
+
+    if (strength == 4 || !connected) {
+        return &cellular_connected_no_internet_icon;
+    }
+
+    switch (strength) {
+        case 1:
+            return &cellular_1_bar_icon;
+        case 2:
+            return &cellular_2_bar_icon;
+        case 3:
+            return &cellular_3_bar_icon;
+        default:
+            return &cellular_off_icon;
+    }
+}
+
+/**
+ * Public function to set WiFi signal strength
+ * @param strength 0 = off, 1-3 = bars, 4 = find, 5 = add
+ */
+void lv_demo_ai_pocket_pet_set_wifi_strength(uint8_t strength)
+{
+    if (strength <= 5) {
+        update_wifi_icon(&demo_data, strength);
+    }
+}
+
+/**
+ * Public function to set cellular signal strength and connection status
+ * @param strength 0 = off, 1-3 = bars, 4 = no internet
+ * @param connected Whether cellular is connected to internet
+ */
+void lv_demo_ai_pocket_pet_set_cellular_status(uint8_t strength, bool connected)
+{
+    if (strength <= 4) {
+        update_cellular_icon(&demo_data, strength, connected);
+    }
+}
+
+/**
+ * Public function to get current WiFi signal strength
+ * @return Current WiFi signal strength (0-5)
+ */
+uint8_t lv_demo_ai_pocket_pet_get_wifi_strength(void)
+{
+    return demo_data.wifi_signal_strength;
+}
+
+/**
+ * Public function to get current cellular signal strength
+ * @return Current cellular signal strength (0-4)
+ */
+uint8_t lv_demo_ai_pocket_pet_get_cellular_strength(void)
+{
+    return demo_data.cellular_signal_strength;
+}
+
+/**
+ * Public function to get current cellular connection status
+ * @return Whether cellular is connected to internet
+ */
+bool lv_demo_ai_pocket_pet_get_cellular_connected(void)
+{
+    return demo_data.cellular_connected;
+}
+
+/**
+ * Updates the battery icon based on level and charging status
+ * @param demo Pointer to the demo data
+ * @param level Battery level (0-6, where 0 = empty, 5 = 5 bars, 6 = full)
+ * @param charging Whether battery is charging
+ */
+static void update_battery_icon(ai_pet_demo_t *demo, uint8_t level, bool charging)
+{
+    const lv_img_dsc_t* icon = get_battery_icon_by_level(level, charging);
+    if (icon) {
+        lv_img_set_src(demo->battery_icon, icon);
+    }
+    demo->battery_level = level;
+    demo->battery_charging = charging;
+}
+
+/**
+ * Returns the appropriate battery icon based on level and charging status
+ * @param level Battery level (0-6, where 0 = empty, 5 = 5 bars, 6 = full)
+ * @param charging Whether battery is charging
+ * @return Pointer to the appropriate icon image descriptor
+ */
+static const lv_img_dsc_t* get_battery_icon_by_level(uint8_t level, bool charging)
+{
+    if (charging) {
+        return &battery_charging_icon;
+    }
+
+    switch (level) {
+        case 0:
+            return &battery_0_icon;
+        case 1:
+            return &battery_1_icon;
+        case 2:
+            return &battery_2_icon;
+        case 3:
+            return &battery_3_icon;
+        case 4:
+            return &battery_4_icon;
+        case 5:
+            return &battery_5_icon;
+        case 6:
+            return &battery_full_icon;
+        default:
+            return &battery_full_icon;
+    }
+}
+
+/**
+ * Public function to set battery level and charging status
+ * @param level Battery level (0-6, where 0 = empty, 5 = 5 bars, 6 = full)
+ * @param charging Whether battery is charging
+ */
+void lv_demo_ai_pocket_pet_set_battery_status(uint8_t level, bool charging)
+{
+    if (level <= 6) {
+        update_battery_icon(&demo_data, level, charging);
+    }
+}
+
+/**
+ * Public function to get current battery level
+ * @return Current battery level (0-6)
+ */
+uint8_t lv_demo_ai_pocket_pet_get_battery_level(void)
+{
+    return demo_data.battery_level;
+}
+
+/**
+ * Public function to get current battery charging status
+ * @return Whether battery is charging
+ */
+bool lv_demo_ai_pocket_pet_get_battery_charging(void)
+{
+    return demo_data.battery_charging;
 }

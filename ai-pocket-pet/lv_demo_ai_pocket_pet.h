@@ -78,6 +78,56 @@ void lv_demo_ai_pocket_pet_show_toast(const char *message, uint32_t delay_ms);
  */
 void lv_demo_ai_pocket_pet_hide_toast(void);
 
+/**
+ * Set WiFi signal strength
+ * @param strength 0 = off, 1-3 = bars, 4 = find, 5 = add
+ */
+void lv_demo_ai_pocket_pet_set_wifi_strength(uint8_t strength);
+
+/**
+ * Set cellular signal strength and connection status
+ * @param strength 0 = off, 1-3 = bars, 4 = no internet
+ * @param connected Whether cellular is connected to internet
+ */
+void lv_demo_ai_pocket_pet_set_cellular_status(uint8_t strength, bool connected);
+
+/**
+ * Get current WiFi signal strength
+ * @return Current WiFi signal strength (0-5)
+ */
+uint8_t lv_demo_ai_pocket_pet_get_wifi_strength(void);
+
+/**
+ * Get current cellular signal strength
+ * @return Current cellular signal strength (0-4)
+ */
+uint8_t lv_demo_ai_pocket_pet_get_cellular_strength(void);
+
+/**
+ * Get current cellular connection status
+ * @return Whether cellular is connected to internet
+ */
+bool lv_demo_ai_pocket_pet_get_cellular_connected(void);
+
+/**
+ * Set battery level and charging status
+ * @param level Battery level (0-6, where 0 = empty, 5 = 5 bars, 6 = full)
+ * @param charging Whether battery is charging
+ */
+void lv_demo_ai_pocket_pet_set_battery_status(uint8_t level, bool charging);
+
+/**
+ * Get current battery level
+ * @return Current battery level (0-6)
+ */
+uint8_t lv_demo_ai_pocket_pet_get_battery_level(void);
+
+/**
+ * Get current battery charging status
+ * @return Whether battery is charging
+ */
+bool lv_demo_ai_pocket_pet_get_battery_charging(void);
+
 /**********************
  *      MACROS
  **********************/
