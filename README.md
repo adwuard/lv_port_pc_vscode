@@ -2,7 +2,7 @@
 
 [LVGL](https://github.com/lvgl/lvgl) is written mainly for microcontrollers and embedded systems, however you can run the library **on your PC** as well without any embedded hardware. The code written on PC can be simply copied when your are using an embedded system.
 
-This project is pre-configured for VSCode and should work work on Windows, Linux and MacOs as well. FreeRTOS is also included and can be optionally enabled to better simulate embedded system's behavior.  
+This project is pre-configured for VSCode and should work work on Windows, Linux and MacOs as well. FreeRTOS is also included and can be optionally enabled to better simulate embedded system's behavior.
 
 
 ## Get started
@@ -77,7 +77,7 @@ To correctly configure the project, the RTOS (Real-Time Operating System) requir
 This configuration ensures that the SDL window is displayed in a timely manner. If this value is reduced, it may cause significant delays in the SDL window's appearance. If the allocated heap memory is too small, the window may fail to appear altogether.
 Therefore, it is crucial to allocate sufficient heap memory to ensure smooth execution and debugging experience.
 
-### Enable FreeRTOS 
+### Enable FreeRTOS
 To enable the rtos part of this project select in lv_conf.h `#define LV_USE_OS   LV_OS_NONE` to `#define LV_USE_OS  LV_OS_FREERTOS`
 Additionaly you have to enable the compilation of all FreeRTOS Files by turn on `option(USE_FREERTOS "Enable FreeRTOS" OFF) ` in the CMakeLists.txt file.
 
@@ -117,11 +117,11 @@ make
 sudo make install
 ```
 ### (RT)OS support
-Works with any OS like pthred, Windows, FreeRTOS, etc. It has build in support for FreeRTOS. 
+Works with any OS like pthred, Windows, FreeRTOS, etc. It has build in support for FreeRTOS.
 
 ## Test
-This project is configured for [VSCode](https://code.visualstudio.com) and is tested on: 
-- Ubuntu Linux 
+This project is configured for [VSCode](https://code.visualstudio.com) and is tested on:
+- Ubuntu Linux
 - Windows WSL (Ubuntu Linux)
 
 It requires a working version of GCC, GDB and make in your path.

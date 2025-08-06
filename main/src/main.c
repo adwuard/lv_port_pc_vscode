@@ -15,6 +15,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/examples/lv_examples.h"
 #include "lvgl/demos/lv_demos.h"
+#include "../ai-pocket-pet/lv_demo_ai_pocket_pet.h"
 #include "glob.h"
 
 /*********************
@@ -30,11 +31,12 @@
  **********************/
 static lv_display_t * hal_init(int32_t w, int32_t h);
 
+
 /**********************
  *  STATIC VARIABLES
  **********************/
 
-/********************** 
+/**********************
  *      MACROS
  **********************/
 
@@ -73,11 +75,11 @@ int main(int argc, char **argv)
   lv_init();
 
   /*Initialize the HAL (display, input devices, tick) for LVGL*/
-  hal_init(320, 480);
+  hal_init(AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT);
 
   #if LV_USE_OS == LV_OS_NONE
- 
-  lv_demo_widgets();
+
+  lv_demo_ai_pocket_pet();
 
   while(1) {
     /* Periodically call the lv_task handler.
@@ -89,7 +91,7 @@ int main(int argc, char **argv)
   #elif LV_USE_OS == LV_OS_FREERTOS
 
   /* Run FreeRTOS and create lvgl task */
-  freertos_main();  
+  freertos_main();
 
   #endif
 
@@ -126,7 +128,7 @@ static lv_display_t * hal_init(int32_t w, int32_t h)
   lv_indev_set_display(mousewheel, disp);
   lv_indev_set_group(mousewheel, lv_group_get_default());
 
-  lv_indev_t * kb = lv_sdl_keyboard_create();
+    lv_indev_t * kb = lv_sdl_keyboard_create();
   lv_indev_set_display(kb, disp);
   lv_indev_set_group(kb, lv_group_get_default());
 

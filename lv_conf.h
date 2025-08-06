@@ -125,7 +125,7 @@
 
     /* Enable native helium assembly to be compiled */
     #define LV_USE_NATIVE_HELIUM_ASM    0
-    
+
     /* 0: use a simple renderer capable of drawing only simple rectangles with gradient, images, texts, and straight lines only
      * 1: use a complex renderer capable of drawing rounded corners, shadow, skew lines, and arcs too */
     #define LV_DRAW_SW_COMPLEX          1
@@ -969,7 +969,7 @@
 #define LV_USE_DEMO_STRESS 0
 
 /*Music player demo*/
-#define LV_USE_DEMO_MUSIC 0
+#define LV_USE_DEMO_MUSIC 1
 #if LV_USE_DEMO_MUSIC
     #define LV_DEMO_MUSIC_SQUARE    0
     #define LV_DEMO_MUSIC_LANDSCAPE 0

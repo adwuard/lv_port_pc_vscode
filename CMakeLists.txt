@@ -86,6 +86,7 @@ else()
     add_executable(main
         ${PROJECT_SOURCE_DIR}/main/src/main.c
         ${PROJECT_SOURCE_DIR}/main/src/mouse_cursor_icon.c
+        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/lv_demo_ai_pocket_pet.c
     )
 endif()
 
