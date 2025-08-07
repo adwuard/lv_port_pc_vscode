@@ -61,8 +61,9 @@ LV_IMG_DECLARE(ducky_emotion_cry);
 #define PET_WALK_DURATION_MAX 8000 // Maximum walk duration (ms)
 #define PET_IDLE_DURATION_MIN 3000 // Minimum idle duration (ms)
 #define PET_IDLE_DURATION_MAX 10000 // Maximum idle duration (ms)
-#define PET_IDLE_ANIMATION_SWITCH_MIN 2000 // Minimum time before switching idle animations (ms)
-#define PET_IDLE_ANIMATION_SWITCH_MAX 6000 // Maximum time before switching idle animations (ms)
+// Stand longer in general: increase minimum and maximum time before switching idle animations
+#define PET_IDLE_ANIMATION_SWITCH_MIN 4000 // Minimum time before switching idle animations (ms)
+#define PET_IDLE_ANIMATION_SWITCH_MAX 12000 // Maximum time before switching idle animations (ms)
 
 /**********************
  *      TYPEDEFS
@@ -122,7 +123,7 @@ lv_obj_t* pet_area_create(lv_obj_t *parent)
     data->pet_area = lv_obj_create(parent);
     // Use full screen height minus status bar and bottom menu
     lv_obj_set_size(data->pet_area, AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT - STATUS_BAR_HEIGHT - BOTTOM_MENU_HEIGHT);
-    lv_obj_align(data->pet_area, LV_ALIGN_TOP_MID, 0, STATUS_BAR_HEIGHT - 10); // Move 10 px higher
+    lv_obj_align(data->pet_area, LV_ALIGN_TOP_MID, 0, STATUS_BAR_HEIGHT); // Move 10 px higher
     lv_obj_set_style_bg_opa(data->pet_area, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(data->pet_area, 0, 0);
     lv_obj_set_style_pad_all(data->pet_area, 0, 0); // Remove padding to maximize space
@@ -132,7 +133,7 @@ lv_obj_t* pet_area_create(lv_obj_t *parent)
 
     // Create a container for the GIF widgets to constrain rendering area
     lv_obj_t *gif_container = lv_obj_create(data->pet_area);
-    lv_obj_set_size(gif_container, 170, 170); // Optimized size for performance
+    lv_obj_set_size(gif_container, 170+10, 170+10); // Optimized size for performance
     lv_obj_align(gif_container, LV_ALIGN_CENTER, 0, -5); // Center with slight upward offset
     lv_obj_set_style_bg_opa(gif_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(gif_container, 0, 0);
@@ -176,12 +177,12 @@ lv_obj_t* pet_area_create(lv_obj_t *parent)
 
     // Create single special animation slot (simple approach)
     data->pet_special_animation = lv_gif_create(gif_container);
-    lv_obj_align(data->pet_special_animation, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(data->pet_special_animation, LV_ALIGN_CENTER, 0, -5); // Move upward by 5 px
     lv_obj_clear_flag(data->pet_special_animation, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(data->pet_special_animation, 159, 164); // Same size as normal animations
     lv_obj_set_style_bg_opa(data->pet_special_animation, LV_OPA_TRANSP, 0);
 
-        // Ensure special animation is on top layer
+    // Ensure special animation is on top layer
     lv_obj_move_foreground(data->pet_special_animation);
 
     lv_obj_add_flag(data->pet_special_animation, LV_OBJ_FLAG_HIDDEN);
@@ -433,7 +434,7 @@ static void switch_to_special_animation(ai_pet_state_t state)
 
     // Set the special animation source
     lv_gif_set_src(data->pet_special_animation, anim_src);
-
+    lv_refr_now(NULL);
     // Bring to front and show (no forced refresh to avoid slowdown)
     lv_obj_move_foreground(data->pet_special_animation);
     lv_obj_clear_flag(data->pet_special_animation, LV_OBJ_FLAG_HIDDEN);

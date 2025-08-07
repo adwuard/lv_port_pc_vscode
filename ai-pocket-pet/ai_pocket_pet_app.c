@@ -384,7 +384,7 @@ static void create_main_screen(void)
     // Add horizontal line across the screen, 3px thick, positioned 1/3 from bottom
     lv_obj_t *horizontal_line = lv_obj_create(g_app_data.screen);
     lv_obj_set_size(horizontal_line, AI_PET_SCREEN_WIDTH, 2);
-    lv_obj_align(horizontal_line, LV_ALIGN_TOP_LEFT, 0, 112); // 168 * (2/3) = 112 pixels from top
+    lv_obj_align(horizontal_line, LV_ALIGN_TOP_LEFT, 0, 80); // 168 * (2/3) = 112 pixels from top
     lv_obj_set_style_bg_color(horizontal_line, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(horizontal_line, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(horizontal_line, 0, 0);
