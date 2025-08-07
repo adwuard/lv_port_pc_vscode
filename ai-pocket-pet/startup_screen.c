@@ -16,8 +16,14 @@
 /*********************
  *      DEFINES
  *********************/
+
+#ifndef AI_PET_SCREEN_WIDTH
 #define AI_PET_SCREEN_WIDTH  384
+#endif
+
+#ifndef AI_PET_SCREEN_HEIGHT
 #define AI_PET_SCREEN_HEIGHT 168
+#endif
 
 /**********************
  *      TYPEDEFS
@@ -82,10 +88,6 @@ void startup_screen_timer_cb(lv_timer_t *timer)
 {
     // Load the main screen
     lv_screen_load(lv_demo_ai_pocket_pet_get_main_screen());
-
-    // Show a toast message to indicate the demo is ready
-    lv_demo_ai_pocket_pet_show_toast("Network icons initialized!", 2000);
-
     // Delete the timer
     lv_timer_del(timer);
 }

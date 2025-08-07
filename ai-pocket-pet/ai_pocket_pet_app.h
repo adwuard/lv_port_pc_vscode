@@ -18,8 +18,12 @@ extern "C" {
 /*********************
  *      DEFINES
  *********************/
+#ifndef AI_PET_SCREEN_WIDTH
 #define AI_PET_SCREEN_WIDTH  384
+#endif
+#ifndef AI_PET_SCREEN_HEIGHT
 #define AI_PET_SCREEN_HEIGHT 168
+#endif
 
 /**********************
  *      TYPEDEFS
