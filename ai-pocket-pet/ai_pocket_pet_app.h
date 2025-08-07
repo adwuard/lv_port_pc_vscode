@@ -30,11 +30,23 @@ extern "C" {
  **********************/
 
 typedef enum {
-    AI_PET_STATE_IDLE,
-    AI_PET_STATE_WALKING,
-    AI_PET_STATE_EATING,
-    AI_PET_STATE_SLEEPING,
-    AI_PET_STATE_PLAYING
+    AI_PET_STATE_NORMAL,        // Normal state (walk, blink, stand)
+    AI_PET_STATE_SLEEP,         // Sleeping animation
+    AI_PET_STATE_DANCE,         // Dancing animation
+    AI_PET_STATE_EAT,           // Eating animation
+    AI_PET_STATE_BATH,          // Bathing animation
+    AI_PET_STATE_TOILET,        // Toilet animation
+    AI_PET_STATE_SICK,          // Sick animation
+    AI_PET_STATE_HAPPY,         // Happy emotion
+    AI_PET_STATE_ANGRY,         // Angry emotion
+    AI_PET_STATE_CRY,           // Crying emotion
+    // Legacy states for backward compatibility
+    AI_PET_STATE_IDLE = AI_PET_STATE_NORMAL,
+    AI_PET_STATE_WALKING = AI_PET_STATE_NORMAL,
+    AI_PET_STATE_BLINKING = AI_PET_STATE_NORMAL,
+    AI_PET_STATE_EATING = AI_PET_STATE_EAT,
+    AI_PET_STATE_SLEEPING = AI_PET_STATE_SLEEP,
+    AI_PET_STATE_PLAYING = AI_PET_STATE_DANCE
 } ai_pet_state_t;
 
 typedef enum {
