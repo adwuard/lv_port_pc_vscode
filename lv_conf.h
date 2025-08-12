@@ -52,9 +52,10 @@
 #define LV_STDARG_INCLUDE       <stdarg.h>
 
 
+#define LV_MEM_SIZE (4* 1024 * 1024U)          /*[bytes]*/
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
 /*Size of the memory available for `lv_malloc()` in bytes (>= 2kB)*/
-#define LV_MEM_SIZE (512 * 1024U)          /*[bytes]*/
+#define LV_MEM_SIZE (2* 1024 * 1024U)          /*[bytes]*/
 
 /*Size of the memory expand for `lv_malloc()` in bytes*/
 #define LV_MEM_POOL_EXPAND_SIZE 0
@@ -68,7 +69,6 @@
 #endif
 #endif  /*LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN*/
 
-#define LV_MEM_SIZE (1024 * 1024U)          /*[bytes]*/
 /*====================
    HAL SETTINGS
  *====================*/
