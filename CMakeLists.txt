@@ -88,19 +88,53 @@ else()
     add_executable(main
         ${PROJECT_SOURCE_DIR}/main/src/main.c
         ${PROJECT_SOURCE_DIR}/main/src/mouse_cursor_icon.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/ai_pocket_pet_app.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/keyboard.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/status_bar.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/pet_area.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/menu_system.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/toast.c
-        ${PROJECT_SOURCE_DIR}/ai-pocket-pet/startup_screen.c
+
+        ${PROJECT_SOURCE_DIR}/arduboy-emu/arduboy_avr.c
+        ${PROJECT_SOURCE_DIR}/arduboy-emu/simavr/examples/parts/ssd1306_virt.c
+        ${PROJECT_SOURCE_DIR}/arduboy-emu/firmware_2048.c
+        ${PROJECT_SOURCE_DIR}/arduboy-emu/arduboy_emu_app.c
     )
 endif()
 
 # Define LVGL configuration as a simple include
 target_compile_definitions(main PRIVATE LV_CONF_INCLUDE_SIMPLE)
 target_link_libraries(main lvgl lvgl::examples lvgl::demos lvgl::thorvg ${SDL2_LIBRARIES} m pthread)
+
+# ----------------- sim-arduboy / simavr integration -----------------
+
+# Headers for sim-arduboy sources
+target_include_directories(main PRIVATE
+    ${PROJECT_SOURCE_DIR}/arduboy-emu
+    ${PROJECT_SOURCE_DIR}/arduboy-emu/simavr/simavr/sim
+    ${PROJECT_SOURCE_DIR}/arduboy-emu/simavr/examples/parts
+)
+
+# Build simavr static library via its makefile and link it
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -dumpmachine
+    OUTPUT_VARIABLE GCC_DUMP_MACHINE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+set(SIMAVR_DIR ${PROJECT_SOURCE_DIR}/arduboy-emu/simavr)
+set(SIMAVR_BIN_DIR ${SIMAVR_DIR}/simavr)
+set(SIMAVR_OBJ_DIR ${SIMAVR_BIN_DIR}/obj-${GCC_DUMP_MACHINE})
+set(SIMAVR_LIB ${SIMAVR_OBJ_DIR}/libsimavr.a)
+
+add_custom_command(
+    OUTPUT ${SIMAVR_LIB}
+    COMMAND make -C ${SIMAVR_BIN_DIR} libsimavr
+    WORKING_DIRECTORY ${SIMAVR_BIN_DIR}
+    COMMENT "Building simavr static library"
+)
+
+add_custom_target(simavr_build DEPENDS ${SIMAVR_LIB})
+
+add_library(simavr STATIC IMPORTED)
+set_target_properties(simavr PROPERTIES IMPORTED_LOCATION ${SIMAVR_LIB})
+add_dependencies(simavr simavr_build)
+
+target_link_libraries(main simavr elf)
 
 # Only link freertos_config if the FreeRTOS directory exists
 if(USE_FREERTOS)

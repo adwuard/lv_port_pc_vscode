@@ -15,7 +15,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/examples/lv_examples.h"
 #include "lvgl/demos/lv_demos.h"
-#include "../ai-pocket-pet/ai_pocket_pet_app.h"
+#include "../../arduboy-emu/arduboy_emu_app.h"
 #include "glob.h"
 
 /*********************
@@ -75,17 +75,20 @@ int main(int argc, char **argv)
   lv_init();
 
   /*Initialize the HAL (display, input devices, tick) for LVGL*/
-  hal_init(AI_PET_SCREEN_WIDTH, AI_PET_SCREEN_HEIGHT);
+  hal_init(ARDUBOY_EMU_SCREEN_WIDTH, ARDUBOY_EMU_SCREEN_HEIGHT);
 
   #if LV_USE_OS == LV_OS_NONE
 
-  lv_demo_ai_pocket_pet();
+  /* Start LVGL app entry and Arduboy emulator (embedded firmware) */
+  lv_arduboy_emu_app();
+  arduboy_emu_start(NULL);
 
   while(1) {
-    /* Periodically call the lv_task handler.
-     * It could be done in a timer interrupt or an OS task too.*/
     lv_timer_handler();
-    usleep(5 * 1000);
+    /* Run one AVR step chunk */
+    extern void arduboy_avr_loop(void);
+    arduboy_avr_loop();
+    usleep(2 * 1000);
   }
 
   #elif LV_USE_OS == LV_OS_FREERTOS
