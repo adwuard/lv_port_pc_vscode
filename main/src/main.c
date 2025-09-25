@@ -15,7 +15,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/examples/lv_examples.h"
 #include "lvgl/demos/lv_demos.h"
-#include "../../arduboy-emu/arduboy_emu_app.h"
+#include "../../cattle-ai-tracker/cattle_ai_tracker_app.h"
 #include "glob.h"
 
 /*********************
@@ -75,19 +75,15 @@ int main(int argc, char **argv)
   lv_init();
 
   /*Initialize the HAL (display, input devices, tick) for LVGL*/
-  hal_init(ARDUBOY_EMU_SCREEN_WIDTH, ARDUBOY_EMU_SCREEN_HEIGHT);
+  hal_init(CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
 
   #if LV_USE_OS == LV_OS_NONE
 
-  /* Start LVGL app entry and Arduboy emulator (embedded firmware) */
-  lv_arduboy_emu_app();
-  arduboy_emu_start(NULL);
+  /* Start LVGL cattle tracker demo */
+  lv_demo_cattle_ai_tracker();
 
   while(1) {
     lv_timer_handler();
-    /* Run one AVR step chunk */
-    extern void arduboy_avr_loop(void);
-    arduboy_avr_loop();
     usleep(2 * 1000);
   }
 

@@ -39,6 +39,8 @@ endif()
 include_directories(${PROJECT_SOURCE_DIR}/main/inc)
 # AI Pocket Pet components
 include_directories(${PROJECT_SOURCE_DIR}/ai-pocket-pet)
+# Cattle AI Tracker app
+include_directories(${PROJECT_SOURCE_DIR}/cattle-ai-tracker)
 
 # Define options for LVGL with default values (OFF)
 option(LV_USE_DRAW_SDL "Use SDL draw unit" OFF)
@@ -88,11 +90,7 @@ else()
     add_executable(main
         ${PROJECT_SOURCE_DIR}/main/src/main.c
         ${PROJECT_SOURCE_DIR}/main/src/mouse_cursor_icon.c
-
-        ${PROJECT_SOURCE_DIR}/arduboy-emu/arduboy_avr.c
-        ${PROJECT_SOURCE_DIR}/arduboy-emu/simavr/examples/parts/ssd1306_virt.c
-        ${PROJECT_SOURCE_DIR}/arduboy-emu/firmware_2048.c
-        ${PROJECT_SOURCE_DIR}/arduboy-emu/arduboy_emu_app.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/cattle_ai_tracker_app.c
     )
 endif()
 
