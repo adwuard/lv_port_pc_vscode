@@ -7,13 +7,13 @@
  *      INCLUDES
  *********************/
 #include "cattle_ai_tracker_app.h"
-#include "resources/compass_face_ring.c"
-#include "resources/compass_center_find.c"
-#include "resources/diatance.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include "resources/compass_face_ring.c"
+#include "resources/compass_center_find.c"
+#include "resources/diatance.c"
 
 /*********************
  *      DEFINES
@@ -70,7 +70,8 @@ typedef struct {
     lv_obj_t *compass_labels;
     lv_obj_t *compass_face_ring_img;
     lv_obj_t *compass_center_overlay;
-    lv_obj_t *interval_lines[12];  /* Dynamic interval lines - increased to 12 for better coverage */
+    lv_obj_t **interval_lines;    /* Dynamic interval lines - allocated as needed */
+    int interval_lines_count;      /* Number of interval lines allocated */
     lv_obj_t *distance_img;
     lv_obj_t *distance_text;
     lv_obj_t *rotation_bg;
@@ -542,46 +543,46 @@ static void update_interval_lines(void)
     float screen_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
     float map_scale = g.distance_scale_meters / screen_radius;
 
-    /* Expanded interval system: more granular ticks for better coverage */
-    float fixed_intervals[] = {
-        50.0f,    /* 50m */
-        100.0f,   /* 100m */
-        150.0f,   /* 150m */
-        200.0f,   /* 200m */
-        300.0f,   /* 300m */
-        400.0f,   /* 400m */
-        500.0f,   /* 500m */
-        750.0f,   /* 750m */
-        1000.0f,  /* 1km */
-        1500.0f,  /* 1.5km */
-        2000.0f,  /* 2km */
-        3000.0f,  /* 3km */
-        4000.0f,  /* 4km */
-        5000.0f,  /* 5km */
-        7500.0f,  /* 7.5km */
-        10000.0f, /* 10km */
-        15000.0f, /* 15km */
-        20000.0f, /* 20km */
-        30000.0f, /* 30km */
-        40000.0f, /* 40km */
-        50000.0f, /* 50km */
-        75000.0f, /* 75km */
-        100000.0f,/* 100km */
-        150000.0f,/* 150km */
-        200000.0f,/* 200km */
-        300000.0f,/* 300km */
-        400000.0f,/* 400km */
-        500000.0f /* 500km */
-    };
+    /* Dynamic interval generation with even spacing */
+    float dynamic_intervals[12];
+    int interval_count = 0;
 
-    /* Find 3-6 most appropriate intervals to show */
+    /* Find the best even step size for the current scale */
+    float total_distance = g.distance_scale_meters;
+    float step_size;
+
+    /* Determine appropriate step size based on total distance */
+    if (total_distance <= 100.0f) {
+        step_size = 20.0f;  /* 20m steps for small scales */
+    } else if (total_distance <= 500.0f) {
+        step_size = 50.0f;  /* 50m steps for medium scales */
+    } else if (total_distance <= 2000.0f) {
+        step_size = 200.0f;  /* 200m steps for larger scales */
+    } else if (total_distance <= 10000.0f) {
+        step_size = 1000.0f;  /* 1km steps for km scales */
+    } else if (total_distance <= 50000.0f) {
+        step_size = 5000.0f;  /* 5km steps for larger km scales */
+    } else if (total_distance <= 200000.0f) {
+        step_size = 20000.0f;  /* 20km steps for very large scales */
+    } else {
+        step_size = 50000.0f;  /* 50km steps for huge scales */
+    }
+
+    /* Generate evenly spaced intervals */
+    for (float interval = step_size; interval <= total_distance; interval += step_size) {
+        if (interval_count < 12) {  /* Limit to prevent overflow */
+            dynamic_intervals[interval_count] = interval;
+            interval_count++;
+        }
+    }
+
+    /* Find which intervals to show (3-6 ticks) */
     int visible_count = 0;
     int selected_indices[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-    int max_intervals = 28;  /* Updated for expanded array */
 
-    /* Select 3-6 intervals that are most relevant to current scale */
-    for (int i = 0; i < max_intervals && visible_count < 12; i++) {
-        float distance = fixed_intervals[i];
+    /* Select intervals that fit within screen bounds */
+    for (int i = 0; i < interval_count && visible_count < 12; i++) {
+        float distance = dynamic_intervals[i];
         float circle_radius = distance / map_scale;
 
         /* Only select intervals that are within reasonable bounds */
@@ -594,8 +595,8 @@ static void update_interval_lines(void)
     /* Ensure we have at least 3 ticks if possible */
     if (visible_count < 3) {
         /* Try to find at least 3 intervals even if they're slightly outside bounds */
-        for (int i = 0; i < max_intervals && visible_count < 3; i++) {
-            float distance = fixed_intervals[i];
+        for (int i = 0; i < interval_count && visible_count < 3; i++) {
+            float distance = dynamic_intervals[i];
             float circle_radius = distance / map_scale;
 
             /* Allow slightly smaller circles to ensure we have at least 3 */
@@ -607,7 +608,7 @@ static void update_interval_lines(void)
     }
 
     /* Update all interval lines */
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < g.interval_lines_count; i++) {
         if (g.interval_lines[i]) {
             bool should_show = false;
             float distance = 0;
@@ -617,7 +618,7 @@ static void update_interval_lines(void)
             for (int j = 0; j < visible_count; j++) {
                 if (selected_indices[j] == i) {
                     should_show = true;
-                    distance = fixed_intervals[i];
+                    distance = dynamic_intervals[selected_indices[j]];
                     circle_radius = distance / map_scale;
 
                     /* Ensure minimum and maximum bounds */
@@ -650,15 +651,29 @@ static void update_interval_lines(void)
 static void create_interval_lines(void)
 {
     /* Clear existing interval lines */
-    for (int i = 0; i < 12; i++) {
-        if (g.interval_lines[i]) {
-            lv_obj_del(g.interval_lines[i]);
-            g.interval_lines[i] = NULL;
+    if (g.interval_lines) {
+        for (int i = 0; i < g.interval_lines_count; i++) {
+            if (g.interval_lines[i]) {
+                lv_obj_del(g.interval_lines[i]);
+            }
         }
+        free(g.interval_lines);
+        g.interval_lines = NULL;
+        g.interval_lines_count = 0;
     }
 
-    /* Create 12 interval lines - they will be positioned dynamically */
-    for (int i = 0; i < 12; i++) {
+    /* Allocate space for up to 12 interval lines */
+    g.interval_lines_count = 12;
+    g.interval_lines = malloc(g.interval_lines_count * sizeof(lv_obj_t*));
+
+    if (!g.interval_lines) {
+        printf("Failed to allocate interval lines array\n");
+        g.interval_lines_count = 0;
+        return;
+    }
+
+    /* Create interval lines - they will be positioned dynamically */
+    for (int i = 0; i < g.interval_lines_count; i++) {
         g.interval_lines[i] = lv_obj_create(g.compass_container);
         lv_obj_set_style_bg_opa(g.interval_lines[i], LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(g.interval_lines[i], 1, 0);
