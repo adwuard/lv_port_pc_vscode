@@ -7,10 +7,36 @@
  *      INCLUDES
  *********************/
 #include "cattle_ai_tracker_app.h"
+#include "resources/compass_face_ring.c"
+#include "resources/compass_center_find.c"
+#include "resources/diatance.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+/*********************
+ *      DEFINES
+ *********************/
+
+/* Dummy GPS data structure */
+typedef struct {
+    float lat, lon;
+    uint32_t color;
+} dummy_target_t;
+
+/* Dummy GPS data */
+static const float DUMMY_SELF_LAT = 30.300500622255004f;  /* Tracker location */
+static const float DUMMY_SELF_LON = 120.06815327830921f;
+
+static const dummy_target_t DUMMY_TARGETS[] = {
+    {30.301400622255004f, 120.06815327830921f, TARGET_COLOR_GREEN},    /* 100M North */
+    {30.300500622255004f, 120.06915327830921f, TARGET_COLOR_YELLOW},  /* 100M East */
+    {30.299600622255004f, 120.06815327830921f, TARGET_COLOR_PINK},    /* 100M South */
+    {30.300500622255004f, 120.06715327830921f, TARGET_COLOR_CYAN}     /* 100M West */
+};
+
+#define DUMMY_TARGET_COUNT (sizeof(DUMMY_TARGETS) / sizeof(DUMMY_TARGETS[0]))
 
 /*********************
  *      DEFINES
@@ -41,16 +67,40 @@ typedef struct {
     lv_obj_t *compass_container;
     lv_obj_t *compass_dial;
     lv_obj_t *needle;
-    lv_obj_t *needle_circle;
     lv_obj_t *compass_labels;
+    lv_obj_t *compass_face_ring_img;
+    lv_obj_t *compass_center_overlay;
+    lv_obj_t *interval_lines[12];  /* Dynamic interval lines - increased to 12 for better coverage */
+    lv_obj_t *distance_img;
+    lv_obj_t *distance_text;
+    lv_obj_t *rotation_bg;
+    lv_obj_t *rotation_text;
     lv_obj_t *calib_panel;
     bool      calibrated;
     float     yaw_deg;
+    int       distance_meters;
+    int       distance_scale_meters;  /* Current distance scale for targets */
+    int       target_distance_scale;  /* Target distance scale for animation */
+    lv_anim_t *distance_anim;         /* Animation for distance transitions */
 
-    /* Dummy GPS/target */
+    /* GPS System */
     int       gps_sat_count;
-    float     self_lat, self_lon;
-    float     target_lat, target_lon;
+    float     self_lat, self_lon;  /* Tracker position (center) */
+
+    /* Target tracking system */
+    #define MAX_TARGETS 10
+    struct {
+        float lat, lon;
+        uint32_t color;
+        bool active;
+        int distance_meters;
+    } targets[MAX_TARGETS];
+    int target_count;
+
+    /* Map scale and rendering */
+    float map_scale;  /* meters per pixel */
+    lv_obj_t *map_container;
+    lv_obj_t *target_markers[MAX_TARGETS];
 
     /* SOS */
     lv_obj_t *sos_hold_ring;
@@ -74,6 +124,22 @@ static cattle_app_t g;
 /**********************
  *  STATIC PROTOTYPES
  **********************/
+static void set_distance_text(int meters);
+static void update_rotation_text(float yaw_degrees);
+static void update_distance_scale(void);
+static void animate_distance_scale(int target_scale);
+static void on_distance_anim_value(void *var, int32_t value);
+static void on_distance_anim_ready(lv_anim_t *anim);
+static void update_interval_lines(void);
+static void create_interval_lines(void);
+static float calculate_distance(float lat1, float lon1, float lat2, float lon2);
+static void add_target_coord(float lat, float lon, uint32_t color);
+static void add_target_at_distance(float distance_meters, float bearing_degrees, uint32_t color);
+static void remove_target_coord(int index);
+static void clear_all_targets(void);
+static void update_map_scale(void);
+static void render_target_markers(void);
+static void update_target_positions_for_new_origin(void);
 static void create_root(void);
 static void create_idle_screen(void);
 static void create_tracking_screen(void);
@@ -82,6 +148,7 @@ static void create_sos_screen(void);
 
 static void show_idle(void);
 static void show_tracking(void);
+static void slide_tracking(bool show);
 static void show_sos_alert(void);
 static void hide_sos_alert(void);
 
@@ -91,10 +158,12 @@ static void on_pressing(lv_event_t *e);
 static void on_released(lv_event_t *e);
 static void on_gesture(lv_event_t *e);
 static void on_settings_drag(lv_event_t *e);
+static void on_tracking_drag(lv_event_t *e);
 static void on_settings_backdrop_click(lv_event_t *e);
 static void on_sos_cancel(lv_event_t *e);
 static void on_tick(lv_timer_t *t);
 static void on_settings_close_anim_ready(lv_anim_t * anim);
+static void on_tracking_close_anim_ready(lv_anim_t * anim);
 
 static void compass_update(float yaw_deg);
 static void compass_build(lv_obj_t *parent);
@@ -110,7 +179,6 @@ void lv_demo_cattle_ai_tracker(void)
     /* Dummy data */
     g.gps_sat_count = 7;
     g.self_lat = 22.280f; g.self_lon = 114.158f; /* HK */
-    g.target_lat = 22.284f; g.target_lon = 114.170f;
     g.calibrated = true;  // Start as calibrated to avoid showing calibration panel
     g.yaw_deg = 0.f;
 
@@ -179,7 +247,7 @@ static void create_idle_screen(void)
 
     /* Center label */
     lv_obj_t *label = lv_label_create(g.idle_screen);
-    lv_label_set_text(label, "Cattle AI Tracker\nIdle\n\nPress 'T' for Tracking\nPress 'S' for Settings\nPress 'I' for Info");
+    lv_label_set_text(label, "Cattle AI Tracker\nIdle Animation. \n Push To Talk\n\nPress 'T' for Tracking\nPress 'S' for Settings\nPress 'I' for Info");
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
@@ -191,7 +259,7 @@ static void create_idle_screen(void)
     lv_obj_set_style_text_color(g.idle_bottom_text, lv_color_hex(0xAAAAAA), 0);
     lv_obj_set_style_text_font(g.idle_bottom_text, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_align(g.idle_bottom_text, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, -50);
 }
 
 static void compass_build(lv_obj_t *parent)
@@ -201,95 +269,594 @@ static void compass_build(lv_obj_t *parent)
     lv_obj_set_size(g.compass_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Outer dial removed */
+    /* Compass face ring image - replaces white ring and labels */
+    g.compass_face_ring_img = lv_img_create(g.compass_container);
+    lv_img_set_src(g.compass_face_ring_img, &compass_face_ring);
+    lv_obj_set_size(g.compass_face_ring_img, 466, 466);  /* Set actual image size */
+    lv_obj_center(g.compass_face_ring_img);
+    lv_obj_clear_flag(g.compass_face_ring_img, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(g.compass_face_ring_img, LV_OBJ_FLAG_SCROLLABLE);
+    /* Set pivot point to screen center for rotation */
+    lv_obj_set_style_transform_pivot_x(g.compass_face_ring_img, CATTLE_SCREEN_WIDTH/2, 0);
+    lv_obj_set_style_transform_pivot_y(g.compass_face_ring_img, CATTLE_SCREEN_HEIGHT/2, 0);
 
-    /* Outer cardinal labels removed */
+    /* Create dynamic interval lines */
+    create_interval_lines();
 
-    /* Rotating white circle with N, W, E, S labels - same radius as needle */
-    int needle_radius = CATTLE_SCREEN_HEIGHT/2 - 40;  // Same as needle length
-    int circle_size = needle_radius * 2;  // Diameter = 2 * radius
+    /* Ensure interval lines are visible on initial load */
+    update_interval_lines();
 
-    g.compass_labels = lv_obj_create(g.compass_container);
-    lv_obj_remove_style_all(g.compass_labels);
-    lv_obj_set_size(g.compass_labels, circle_size, circle_size);
-    /* Position circle center exactly at CIRCLE_CENTER */
-    lv_obj_set_pos(g.compass_labels, CIRCLE_CENTER - needle_radius, CIRCLE_CENTER - needle_radius);
-    lv_obj_set_style_radius(g.compass_labels, needle_radius, 0);
-    lv_obj_set_style_bg_opa(g.compass_labels, LV_OPA_TRANSP, 0);  // No fill color
-    lv_obj_set_style_border_width(g.compass_labels, 35, 0);  // 20px white border
-    lv_obj_set_style_border_color(g.compass_labels, lv_color_white(), 0);
-    lv_obj_clear_flag(g.compass_labels, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(g.compass_labels, LV_OBJ_FLAG_SCROLLABLE);
-    /* Set pivot point to compass center - relative to the circle's position */
-    lv_obj_set_style_transform_pivot_x(g.compass_labels, needle_radius, 0);  // needle_radius = half of circle width
-    lv_obj_set_style_transform_pivot_y(g.compass_labels, needle_radius, 0);  // needle_radius = half of circle height
-
-    /* N, W, E, S labels positioned on the white circle */
-    static const char *rotating_dirs[] = {"N","W","E","S"};
-    static const int16_t angles[] = {0, 270, 90, 180}; // N, W, E, S in degrees
-    int label_radius = needle_radius - 20; // Distance from center, with some margin
-
-    for(int i=0;i<4;i++){
-        lv_obj_t *rotating_lbl = lv_label_create(g.compass_labels);
-        lv_label_set_text(rotating_lbl, rotating_dirs[i]);
-        lv_obj_set_style_text_color(rotating_lbl, lv_color_black(), 0);
-        lv_obj_set_style_text_font(rotating_lbl, &lv_font_montserrat_16, 0);
-
-        /* Position labels on the white circle */
-        float angle_rad = angles[i] * M_PI / 180.0f;
-        int16_t x = (int16_t)(label_radius * sin(angle_rad));
-        int16_t y = (int16_t)(-label_radius * cos(angle_rad));
-        lv_obj_align(rotating_lbl, LV_ALIGN_CENTER, x, y);
-
-        /* No individual text rotation - all labels face the same direction */
-    }
-
-    /* Needle - thin 2px line */
+    /* Needle - thin 2px line (moved after interval lines to be on top) */
     g.needle = lv_line_create(g.compass_container);
     static lv_point_precise_t pts[2];
     pts[0].x = CIRCLE_CENTER; pts[0].y = CIRCLE_CENTER;
-    pts[1].x = CIRCLE_CENTER; pts[1].y = CIRCLE_CENTER - (CATTLE_SCREEN_HEIGHT/2 - 40);
+    pts[1].x = CIRCLE_CENTER; pts[1].y = CIRCLE_CENTER - (CATTLE_SCREEN_HEIGHT/2 - 60);
     lv_line_set_points(g.needle, pts, 2);
     lv_obj_set_style_line_width(g.needle, 2, 0);
-    lv_obj_set_style_line_color(g.needle, lv_color_hex(0xff5252), 0);
+    lv_obj_set_style_line_color(g.needle, lv_color_hex(0xFFFFFF), 0);
 
-    /* Orange solid triangle at end of needle - 10px away from line end */
-    g.needle_circle = lv_obj_create(g.compass_container);
-    lv_obj_set_size(g.needle_circle, 16, 16);
-    /* Position triangle at the end of needle line */
-    lv_obj_set_pos(g.needle_circle, CIRCLE_CENTER - 8, CIRCLE_CENTER - (CATTLE_SCREEN_HEIGHT/2 - 40) - 20);
-    lv_obj_set_style_radius(g.needle_circle, 0, 0);  // No radius for triangle
-    lv_obj_set_style_bg_opa(g.needle_circle, LV_OPA_TRANSP, 0);  // Transparent background
-    lv_obj_set_style_border_width(g.needle_circle, 0, 0);
-    lv_obj_set_style_pad_all(g.needle_circle, 0, 0);
-    /* Set pivot point to compass center - relative to the triangle's position */
-    lv_obj_set_style_transform_pivot_x(g.needle_circle, 8, 0);  // 8 = half of triangle width
-    lv_obj_set_style_transform_pivot_y(g.needle_circle, 8, 0);  // 8 = half of triangle height
+    /* Compass center overlay - fixed, does not rotate */
+    g.compass_center_overlay = lv_img_create(g.compass_container);
+    lv_img_set_src(g.compass_center_overlay, &compass_center_find);
+    lv_obj_set_size(g.compass_center_overlay, 466, 466);  /* Set actual image size */
+    lv_obj_center(g.compass_center_overlay);
+    lv_obj_clear_flag(g.compass_center_overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(g.compass_center_overlay, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Create solid triangle shape using a line object with filled area */
-    lv_obj_t *triangle = lv_line_create(g.needle_circle);
-    static lv_point_precise_t triangle_pts[4];
-    triangle_pts[0].x = 8; triangle_pts[0].y = 14;  // Bottom point (upside down)
-    triangle_pts[1].x = 2; triangle_pts[1].y = 2;  // Top left
-    triangle_pts[2].x = 14; triangle_pts[2].y = 2;  // Top right
-    triangle_pts[3].x = 8; triangle_pts[3].y = 14;  // Back to bottom
-    lv_line_set_points(triangle, triangle_pts, 4);
-    lv_obj_set_style_line_width(triangle, 0, 0);  // No line width for solid fill
-    lv_obj_set_style_line_color(triangle, lv_color_hex(0xFF8800), 0);
-    lv_obj_set_style_bg_color(triangle, lv_color_hex(0xFF8800), 0);  // Orange fill
-    lv_obj_set_style_bg_opa(triangle, LV_OPA_COVER, 0);  // Solid fill
-
-    /* White spot at dead center */
-    lv_obj_t *center_dot = lv_obj_create(g.compass_container);
-    lv_obj_set_size(center_dot, 4, 4);
-    lv_obj_set_pos(center_dot, CIRCLE_CENTER - 2, CIRCLE_CENTER - 2);
-    lv_obj_set_style_radius(center_dot, 2, 0);
-    lv_obj_set_style_bg_color(center_dot, lv_color_white(), 0);
-    lv_obj_set_style_border_width(center_dot, 0, 0);
-    lv_obj_set_style_pad_all(center_dot, 0, 0);
 
     /* Calibration panel - completely removed */
     g.calib_panel = NULL;
+}
+
+static void slide_tracking(bool show)
+{
+    if(show){
+        lv_obj_add_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g.sos_screen, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g.settings_panel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g.settings_backdrop, LV_OBJ_FLAG_HIDDEN);
+
+        /* Clear hidden flag and position for animation */
+        lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_x(g.tracking_screen, CATTLE_SCREEN_WIDTH);  /* Start from right side */
+
+        /* Ensure interval lines are properly initialized when tracking screen is shown */
+        update_interval_lines();
+
+        /* Safety check - ensure position is never past center */
+        lv_coord_t current_x = lv_obj_get_x(g.tracking_screen);
+        if(current_x < 0) {
+            lv_obj_set_x(g.tracking_screen, 0);  /* Force to center if somehow negative */
+        }
+
+        /* Enhanced opening animation with easing */
+        lv_anim_t a; lv_anim_init(&a);
+        lv_anim_set_var(&a, g.tracking_screen);
+        lv_anim_set_values(&a, CATTLE_SCREEN_WIDTH, 0);  /* From right to center (0) - never past center */
+        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_x);
+        lv_anim_set_time(&a, 400);  /* Slightly longer for smoother animation */
+        lv_anim_set_early_apply(&a, true);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_out);  /* Ease out for natural feel */
+        lv_anim_start(&a);
+    } else {
+        /* Enhanced closing animation with easing */
+        lv_anim_t a; lv_anim_init(&a);
+        lv_anim_set_var(&a, g.tracking_screen);
+        lv_anim_set_values(&a, 0, CATTLE_SCREEN_WIDTH);  /* From center (0) to right - never past center */
+        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_x);
+        lv_anim_set_time(&a, 350);  /* Slightly longer for smoother animation */
+        lv_anim_set_early_apply(&a, true);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_in);  /* Ease in for natural feel */
+        lv_anim_set_ready_cb(&a, on_tracking_close_anim_ready);
+        lv_anim_start(&a);
+    }
+}
+
+static void on_tracking_drag(lv_event_t *e)
+{
+    lv_indev_t *indev = lv_indev_get_act();
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+
+    /* Get current screen position */
+    lv_coord_t current_x = lv_obj_get_x(g.tracking_screen);
+
+    /* Calculate drag distance from initial position */
+    static lv_coord_t start_x = 0;
+    static bool drag_started = false;
+
+    if(lv_event_get_code(e) == LV_EVENT_PRESSING) {
+        if(!drag_started) {
+            start_x = current_x;
+            drag_started = true;
+        }
+
+        /* Calculate new position based on drag */
+        lv_coord_t drag_delta = point.x - start_x;
+        lv_coord_t new_x = start_x + drag_delta;
+
+        /* ABSOLUTE bounds checking - NEVER allow past center (x=0) */
+        if(new_x < 0) {
+            new_x = 0;  /* Hard stop - never go past center */
+        }
+        if(new_x > CATTLE_SCREEN_WIDTH) {
+            new_x = CATTLE_SCREEN_WIDTH;
+        }
+
+        /* Update screen position in real-time */
+        lv_obj_set_x(g.tracking_screen, new_x);
+
+        /* If dragged left significantly, close the tracking screen */
+        if(new_x < CATTLE_SCREEN_WIDTH / 3) {
+            printf("Drag left - closing tracking\n");
+            slide_tracking(false);
+            drag_started = false;
+        }
+    } else if(lv_event_get_code(e) == LV_EVENT_RELEASED) {
+        if(drag_started) {
+            /* Snap back to original position if not closed */
+            if(current_x < CATTLE_SCREEN_WIDTH * 2 / 3) {
+                printf("Drag released - snapping back\n");
+                lv_obj_set_x(g.tracking_screen, 0);
+            }
+
+            /* Safety check - ensure position is never past center */
+            lv_coord_t final_x = lv_obj_get_x(g.tracking_screen);
+            if(final_x < 0) {
+                lv_obj_set_x(g.tracking_screen, 0);  /* Force to center if somehow negative */
+            }
+
+            drag_started = false;
+        }
+    }
+}
+
+static void on_tracking_close_anim_ready(lv_anim_t * anim)
+{
+    (void)anim;
+    lv_obj_add_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN);
+
+    /* Ensure focus returns to keyboard handler */
+    if(g.focus_obj) {
+        lv_group_focus_obj(g.focus_obj);
+    }
+}
+
+static void set_distance_text(int meters)
+{
+    char distance_str[32];
+
+    if (meters >= 1000) {
+        /* Display in kilometers */
+        float km = meters / 1000.0f;
+        snprintf(distance_str, sizeof(distance_str), "%.1fKM", km);
+    } else {
+        /* Display in meters */
+        snprintf(distance_str, sizeof(distance_str), "%dM", meters);
+    }
+
+    lv_label_set_text(g.distance_text, distance_str);
+}
+
+static void update_rotation_text(float yaw_degrees)
+{
+    char rotation_str[16];
+    int degrees = (int)roundf(yaw_degrees);
+
+    /* Mirror the angle - flip the rotation */
+    degrees = 360 - degrees;
+
+    /* Normalize to 0-360 range */
+    while (degrees < 0) degrees += 360;
+    while (degrees >= 360) degrees -= 360;
+
+    /* Determine cardinal direction */
+    const char* direction;
+    if (degrees >= 337.5f || degrees < 22.5f) {
+        direction = "N";
+    } else if (degrees >= 22.5f && degrees < 67.5f) {
+        direction = "NE";
+    } else if (degrees >= 67.5f && degrees < 112.5f) {
+        direction = "E";
+    } else if (degrees >= 112.5f && degrees < 157.5f) {
+        direction = "SE";
+    } else if (degrees >= 157.5f && degrees < 202.5f) {
+        direction = "S";
+    } else if (degrees >= 202.5f && degrees < 247.5f) {
+        direction = "SW";
+    } else if (degrees >= 247.5f && degrees < 292.5f) {
+        direction = "W";
+    } else {
+        direction = "NW";
+    }
+
+    snprintf(rotation_str, sizeof(rotation_str), "%d° %s", degrees, direction);
+    lv_label_set_text(g.rotation_text, rotation_str);
+}
+
+static void update_distance_scale(void)
+{
+    /* Update distance text to show current scale */
+    set_distance_text(g.distance_scale_meters);
+
+    /* Update map scale based on new distance scale */
+    update_map_scale();
+
+    /* Re-render all target markers with new scale */
+    render_target_markers();
+}
+
+static void animate_distance_scale(int target_scale)
+{
+    /* Stop any existing animation */
+    if (g.distance_anim) {
+        lv_anim_del(g.distance_anim, NULL);
+        g.distance_anim = NULL;
+    }
+
+    /* Set target scale */
+    g.target_distance_scale = target_scale;
+
+    /* Create new animation using static allocation */
+    static lv_anim_t anim;
+    g.distance_anim = &anim;
+    lv_anim_init(g.distance_anim);
+    lv_anim_set_var(g.distance_anim, &g.distance_scale_meters);
+    lv_anim_set_values(g.distance_anim, g.distance_scale_meters, target_scale);
+    lv_anim_set_exec_cb(g.distance_anim, on_distance_anim_value);
+    lv_anim_set_time(g.distance_anim, 500);  /* 500ms animation duration */
+    lv_anim_set_ready_cb(g.distance_anim, on_distance_anim_ready);
+    lv_anim_start(g.distance_anim);
+}
+
+static void on_distance_anim_value(void *var, int32_t value)
+{
+    (void)var;
+    /* Update the distance scale with the animated value */
+    g.distance_scale_meters = (int)value;
+
+    /* Update distance text and re-render markers during animation */
+    set_distance_text(g.distance_scale_meters);
+    update_map_scale();
+    update_interval_lines();
+    render_target_markers();
+
+    /* Force refresh of the compass container to show interval line changes */
+    lv_obj_invalidate(g.compass_container);
+}
+
+static void on_distance_anim_ready(lv_anim_t *anim)
+{
+    (void)anim;
+    /* Animation complete - clean up */
+    g.distance_anim = NULL;
+}
+
+static void update_interval_lines(void)
+{
+    /* Calculate screen radius for maximum circle */
+    float max_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 15;
+    float min_radius = 20;  /* Minimum radius for visible circles */
+
+    /* Calculate the map scale - same as used for target markers */
+    float screen_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
+    float map_scale = g.distance_scale_meters / screen_radius;
+
+    /* Expanded interval system: more granular ticks for better coverage */
+    float fixed_intervals[] = {
+        50.0f,    /* 50m */
+        100.0f,   /* 100m */
+        150.0f,   /* 150m */
+        200.0f,   /* 200m */
+        300.0f,   /* 300m */
+        400.0f,   /* 400m */
+        500.0f,   /* 500m */
+        750.0f,   /* 750m */
+        1000.0f,  /* 1km */
+        1500.0f,  /* 1.5km */
+        2000.0f,  /* 2km */
+        3000.0f,  /* 3km */
+        4000.0f,  /* 4km */
+        5000.0f,  /* 5km */
+        7500.0f,  /* 7.5km */
+        10000.0f, /* 10km */
+        15000.0f, /* 15km */
+        20000.0f, /* 20km */
+        30000.0f, /* 30km */
+        40000.0f, /* 40km */
+        50000.0f, /* 50km */
+        75000.0f, /* 75km */
+        100000.0f,/* 100km */
+        150000.0f,/* 150km */
+        200000.0f,/* 200km */
+        300000.0f,/* 300km */
+        400000.0f,/* 400km */
+        500000.0f /* 500km */
+    };
+
+    /* Find 3-6 most appropriate intervals to show */
+    int visible_count = 0;
+    int selected_indices[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    int max_intervals = 28;  /* Updated for expanded array */
+
+    /* Select 3-6 intervals that are most relevant to current scale */
+    for (int i = 0; i < max_intervals && visible_count < 12; i++) {
+        float distance = fixed_intervals[i];
+        float circle_radius = distance / map_scale;
+
+        /* Only select intervals that are within reasonable bounds */
+        if (circle_radius >= min_radius && circle_radius <= max_radius) {
+            selected_indices[visible_count] = i;
+            visible_count++;
+        }
+    }
+
+    /* Ensure we have at least 3 ticks if possible */
+    if (visible_count < 3) {
+        /* Try to find at least 3 intervals even if they're slightly outside bounds */
+        for (int i = 0; i < max_intervals && visible_count < 3; i++) {
+            float distance = fixed_intervals[i];
+            float circle_radius = distance / map_scale;
+
+            /* Allow slightly smaller circles to ensure we have at least 3 */
+            if (circle_radius >= min_radius * 0.8f && circle_radius <= max_radius * 1.2f) {
+                selected_indices[visible_count] = i;
+                visible_count++;
+            }
+        }
+    }
+
+    /* Update all interval lines */
+    for (int i = 0; i < 12; i++) {
+        if (g.interval_lines[i]) {
+            bool should_show = false;
+            float distance = 0;
+            float circle_radius = 0;
+
+            /* Check if this line index corresponds to a selected interval */
+            for (int j = 0; j < visible_count; j++) {
+                if (selected_indices[j] == i) {
+                    should_show = true;
+                    distance = fixed_intervals[i];
+                    circle_radius = distance / map_scale;
+
+                    /* Ensure minimum and maximum bounds */
+                    if (circle_radius < min_radius) circle_radius = min_radius;
+                    if (circle_radius > max_radius) circle_radius = max_radius;
+                    break;
+                }
+            }
+
+            printf("Line %d: distance=%.0f, radius=%.1f, show=%d\n", i, distance, circle_radius, should_show);
+
+            if (should_show) {
+                lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_size(g.interval_lines[i], (int)circle_radius * 2, (int)circle_radius * 2);
+                lv_obj_set_pos(g.interval_lines[i], CIRCLE_CENTER - (int)circle_radius, CIRCLE_CENTER - (int)circle_radius);
+                lv_obj_set_style_radius(g.interval_lines[i], (int)circle_radius, 0);
+
+                /* Force refresh of this specific line */
+                lv_obj_invalidate(g.interval_lines[i]);
+            } else {
+                /* Hide lines that are not selected */
+                lv_obj_add_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        } else {
+            printf("Line %d: NULL pointer!\n", i);
+        }
+    }
+}
+
+static void create_interval_lines(void)
+{
+    /* Clear existing interval lines */
+    for (int i = 0; i < 12; i++) {
+        if (g.interval_lines[i]) {
+            lv_obj_del(g.interval_lines[i]);
+            g.interval_lines[i] = NULL;
+        }
+    }
+
+    /* Create 12 interval lines - they will be positioned dynamically */
+    for (int i = 0; i < 12; i++) {
+        g.interval_lines[i] = lv_obj_create(g.compass_container);
+        lv_obj_set_style_bg_opa(g.interval_lines[i], LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(g.interval_lines[i], 1, 0);
+        lv_obj_set_style_border_color(g.interval_lines[i], lv_color_hex(0x666666), 0);
+        lv_obj_set_style_pad_all(g.interval_lines[i], 0, 0);
+        lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Initially hide all lines - they will be shown by update_interval_lines */
+        lv_obj_add_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
+    }
+
+    /* Position the lines dynamically based on current distance scale */
+    update_interval_lines();
+
+    /* Force initial refresh */
+    lv_obj_invalidate(g.compass_container);
+}
+
+/* GPS Utility Functions */
+static float calculate_distance(float lat1, float lon1, float lat2, float lon2)
+{
+    /* Haversine formula for distance calculation */
+    const float R = 6371000.0f; /* Earth radius in meters */
+    float dlat = (lat2 - lat1) * M_PI / 180.0f;
+    float dlon = (lon2 - lon1) * M_PI / 180.0f;
+    float a = sinf(dlat/2) * sinf(dlat/2) + cosf(lat1 * M_PI / 180.0f) * cosf(lat2 * M_PI / 180.0f) * sinf(dlon/2) * sinf(dlon/2);
+    float c = 2 * atan2f(sqrtf(a), sqrtf(1-a));
+    return R * c;
+}
+
+static void add_target_coord(float lat, float lon, uint32_t color)
+{
+    if (g.target_count >= MAX_TARGETS) return;
+
+    int index = g.target_count;
+    g.targets[index].lat = lat;
+    g.targets[index].lon = lon;
+    g.targets[index].color = color;
+    g.targets[index].active = true;
+    g.targets[index].distance_meters = (int)calculate_distance(g.self_lat, g.self_lon, lat, lon);
+
+    g.target_count++;
+    update_map_scale();
+    render_target_markers();
+}
+
+static void add_target_at_distance(float distance_meters, float bearing_degrees, uint32_t color)
+{
+    if (g.target_count >= MAX_TARGETS) return;
+
+    /* Convert bearing to radians */
+    float bearing_rad = bearing_degrees * M_PI / 180.0f;
+
+    /* Calculate offset in meters */
+    float x_meters = distance_meters * sinf(bearing_rad);
+    float y_meters = distance_meters * cosf(bearing_rad);
+
+    /* Convert meters to GPS coordinates */
+    float lat_factor = 111320.0f;  /* meters per degree latitude */
+    float lon_factor = 111320.0f * cosf(g.self_lat * M_PI / 180.0f);  /* meters per degree longitude */
+
+    float lat_offset = y_meters / lat_factor;
+    float lon_offset = x_meters / lon_factor;
+
+    /* Add target at calculated position */
+    add_target_coord(g.self_lat + lat_offset, g.self_lon + lon_offset, color);
+}
+
+static void remove_target_coord(int index)
+{
+    if (index < 0 || index >= g.target_count) return;
+
+    /* Remove marker from screen */
+    if (g.target_markers[index]) {
+        lv_obj_del(g.target_markers[index]);
+        g.target_markers[index] = NULL;
+    }
+
+    /* Shift remaining targets */
+    for (int i = index; i < g.target_count - 1; i++) {
+        g.targets[i] = g.targets[i + 1];
+        g.target_markers[i] = g.target_markers[i + 1];
+        g.target_markers[i + 1] = NULL;
+    }
+
+    g.target_count--;
+    update_map_scale();
+    render_target_markers();
+}
+
+static void clear_all_targets(void)
+{
+    for (int i = 0; i < g.target_count; i++) {
+        if (g.target_markers[i]) {
+            lv_obj_del(g.target_markers[i]);
+            g.target_markers[i] = NULL;
+        }
+    }
+    g.target_count = 0;
+    update_map_scale();
+}
+
+static void update_map_scale(void)
+{
+    /* Use the current distance scale to determine map scale */
+    float screen_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
+    g.map_scale = g.distance_scale_meters / screen_radius;
+}
+
+static void render_target_markers(void)
+{
+    /* Clear existing markers */
+    for (int i = 0; i < MAX_TARGETS; i++) {
+        if (g.target_markers[i]) {
+            lv_obj_del(g.target_markers[i]);
+            g.target_markers[i] = NULL;
+        }
+    }
+
+    /* Calculate screen radius for boundary checking */
+    float screen_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
+
+    /* Create new markers */
+    for (int i = 0; i < g.target_count; i++) {
+        if (!g.targets[i].active) continue;
+
+        /* Calculate relative position */
+        float delta_lat = g.targets[i].lat - g.self_lat;
+        float delta_lon = g.targets[i].lon - g.self_lon;
+
+        /* Convert to screen coordinates (meters to pixels) - dynamic calculation */
+        float lat_factor = 111320.0f;  /* meters per degree latitude */
+        float lon_factor = 111320.0f * cosf(g.self_lat * M_PI / 180.0f);  /* meters per degree longitude at current latitude */
+
+        float x_meters = delta_lon * lon_factor;
+        float y_meters = delta_lat * lat_factor;
+
+        /* Apply compass rotation to target positions (negate angle for correct direction) */
+        float angle_rad = -g.yaw_deg * M_PI / 180.0f;
+        float cos_angle = cosf(angle_rad);
+        float sin_angle = sinf(angle_rad);
+
+        /* Rotate the target position relative to compass */
+        float rotated_x = x_meters * cos_angle - y_meters * sin_angle;
+        float rotated_y = x_meters * sin_angle + y_meters * cos_angle;
+
+        /* Scale to screen coordinates */
+        float x_pixels = rotated_x / g.map_scale;
+        float y_pixels = -rotated_y / g.map_scale; /* Negative for screen coordinates */
+
+        /* Calculate distance from center */
+        float distance_from_center = sqrtf(x_pixels * x_pixels + y_pixels * y_pixels);
+
+        /* Create marker */
+        g.target_markers[i] = lv_obj_create(g.map_container);
+        lv_obj_set_size(g.target_markers[i], 10, 10);
+        lv_obj_set_style_bg_color(g.target_markers[i], lv_color_hex(g.targets[i].color), 0);
+        lv_obj_set_style_radius(g.target_markers[i], 5, 0);
+
+        if (distance_from_center > screen_radius) {
+            /* Target exceeds circle - position at boundary and add white border */
+            float angle = atan2f(y_pixels, x_pixels);
+            float boundary_x = cosf(angle) * screen_radius;
+            float boundary_y = sinf(angle) * screen_radius;
+
+            lv_obj_set_pos(g.target_markers[i],
+                          CATTLE_SCREEN_WIDTH/2 + boundary_x - 5,
+                          CATTLE_SCREEN_HEIGHT/2 + boundary_y - 5);
+
+            /* Add white 2px border */
+            lv_obj_set_style_border_width(g.target_markers[i], 2, 0);
+            lv_obj_set_style_border_color(g.target_markers[i], lv_color_white(), 0);
+        } else {
+            /* Target is within circle - normal positioning */
+            lv_obj_set_pos(g.target_markers[i],
+                          CATTLE_SCREEN_WIDTH/2 + x_pixels - 5,
+                          CATTLE_SCREEN_HEIGHT/2 + y_pixels - 5);
+
+            /* No border for targets within circle */
+            lv_obj_set_style_border_width(g.target_markers[i], 0, 0);
+        }
+    }
+}
+
+static void update_target_positions_for_new_origin(void)
+{
+    /* Recalculate all target positions based on new tracker origin */
+    for (int i = 0; i < g.target_count; i++) {
+        if (!g.targets[i].active) continue;
+
+        /* Recalculate distance from new origin */
+        g.targets[i].distance_meters = (int)calculate_distance(g.self_lat, g.self_lon, g.targets[i].lat, g.targets[i].lon);
+    }
+
+    /* Update map scale and re-render markers */
+    update_map_scale();
+    render_target_markers();
 }
 
 static void create_tracking_screen(void)
@@ -300,7 +867,75 @@ static void create_tracking_screen(void)
     lv_obj_set_style_bg_opa(g.tracking_screen, LV_OPA_TRANSP, 0);
     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* Add drag functionality to tracking screen */
+    lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_RELEASED, NULL);
+
     compass_build(g.tracking_screen);
+
+    /* Create map container for GPS targets */
+    g.map_container = lv_obj_create(g.tracking_screen);
+    lv_obj_remove_style_all(g.map_container);
+    lv_obj_set_size(g.map_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_opa(g.map_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g.map_container, 0, 0);
+    lv_obj_set_style_pad_all(g.map_container, 0, 0);
+
+    /* Initialize dummy GPS data from data structure */
+    g.self_lat = DUMMY_SELF_LAT;
+    g.self_lon = DUMMY_SELF_LON;
+    g.target_count = 0;
+    g.map_scale = 1.0f;
+
+    /* Add dummy targets from data structure using actual GPS coordinates */
+    for (int i = 0; i < DUMMY_TARGET_COUNT; i++) {
+        add_target_coord(DUMMY_TARGETS[i].lat,
+                        DUMMY_TARGETS[i].lon,
+                        DUMMY_TARGETS[i].color);
+    }
+
+    /* Add distance image - positioned at center with 10px right offset - ON TOP LAYER */
+    g.distance_img = lv_img_create(g.tracking_screen);
+    lv_img_set_src(g.distance_img, &diatance);
+    lv_obj_set_size(g.distance_img, 157, 14);  /* Match the image dimensions */
+    lv_obj_center(g.distance_img);
+    lv_obj_set_x(g.distance_img, lv_obj_get_x(g.distance_img) + 95);  /* Offset 10px to the right */
+
+    /* Add distance text label under the arrow */
+    g.distance_text = lv_label_create(g.tracking_screen);
+    lv_obj_set_style_text_color(g.distance_text, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.distance_text, &lv_font_montserrat_24, 0);
+    lv_obj_center(g.distance_text);
+    lv_obj_set_y(g.distance_text, lv_obj_get_y(g.distance_img) + 15);  /* Position under the arrow */
+    lv_obj_set_x(g.distance_text, lv_obj_get_x(g.distance_img) + 95);  /* Position under the arrow */
+
+    /* Initialize distance to 100M */
+    g.distance_meters = 100;
+    g.distance_scale_meters = 100;  /* Default scale */
+    set_distance_text(g.distance_meters);
+
+    /* Create rotation display at lower bottom */
+    g.rotation_bg = lv_obj_create(g.tracking_screen);
+    lv_obj_set_size(g.rotation_bg, 100, 32);  /* Slightly tighter - reduced from 120x40 to 100x32 */
+    lv_obj_set_style_bg_color(g.rotation_bg, lv_color_hex(0x404040), 0);  /* Slight grayish color */
+    lv_obj_set_style_bg_opa(g.rotation_bg, LV_OPA_80, 0);
+    lv_obj_set_style_radius(g.rotation_bg, 16, 0);  /* Adjusted radius for smaller size */
+    lv_obj_set_style_border_width(g.rotation_bg, 0, 0);
+    lv_obj_set_style_pad_all(g.rotation_bg, 6, 0);  /* Reduced padding from 8 to 6 */
+    lv_obj_align(g.rotation_bg, LV_ALIGN_BOTTOM_MID, 0, -75);  /* Move 35px higher (from -20 to -55) */
+
+    g.rotation_text = lv_label_create(g.rotation_bg);
+    lv_obj_set_style_text_color(g.rotation_text, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.rotation_text, &lv_font_montserrat_16, 0);
+    lv_obj_center(g.rotation_text);
+
+    /* Initialize rotation display */
+    update_rotation_text(g.yaw_deg);
+
+    /* Ensure all elements are on top layer by moving them to front */
+    lv_obj_move_foreground(g.distance_img);
+    lv_obj_move_foreground(g.distance_text);
+    lv_obj_move_foreground(g.rotation_bg);
 }
 
 static void create_settings_panel(void)
@@ -433,24 +1068,7 @@ static void show_idle(void)
 
 static void show_tracking(void)
 {
-    lv_obj_add_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(g.sos_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(g.settings_panel, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(g.settings_backdrop, LV_OBJ_FLAG_HIDDEN);
-
-    /* Clear hidden flag and position for animation */
-    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_x(g.tracking_screen, CATTLE_SCREEN_WIDTH);  /* Start from right side */
-
-    /* Animate tracking screen sliding in from right with settings-style animation */
-    lv_anim_t a; lv_anim_init(&a);
-    lv_anim_set_var(&a, g.tracking_screen);
-    lv_anim_set_values(&a, CATTLE_SCREEN_WIDTH, 0);
-    lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_x);
-    lv_anim_set_time(&a, 400);  /* Match settings panel timing */
-    lv_anim_set_early_apply(&a, true);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_out);  /* Same easing as settings */
-    lv_anim_start(&a);
+    slide_tracking(true);
 }
 
 static void show_sos_alert(void)
@@ -589,7 +1207,7 @@ static void on_gesture(lv_event_t *e)
                 break;
             case LV_DIR_LEFT:  // Swipe left - tracking screen
                 printf("Swipe left - showing tracking\n");
-                show_tracking();
+                slide_tracking(true);
                 break;
             case LV_DIR_RIGHT:  // Swipe right - idle screen
                 printf("Swipe right - showing idle\n");
@@ -619,7 +1237,7 @@ static void on_keyboard(lv_event_t *e)
             break;
         case 't': case 'T':  // Tracking screen
             printf("Key T - showing tracking\n");
-            show_tracking();
+            slide_tracking(true);
             break;
         case 's': case 'S':  // Settings
             printf("Key S - toggling settings\n");
@@ -640,6 +1258,34 @@ static void on_keyboard(lv_event_t *e)
             if(!g.sos_active) {
                 show_sos_alert();
             }
+            break;
+        case '0':  // 50m scale
+            printf("Key 0 - animating to 50m scale\n");
+            animate_distance_scale(50);
+            break;
+        case '1':  // 100m scale
+            printf("Key 1 - animating to 100m scale\n");
+            animate_distance_scale(100);
+            break;
+        case '2':  // 200m scale
+            printf("Key 2 - animating to 200m scale\n");
+            animate_distance_scale(200);
+            break;
+        case '3':  // 500m scale
+            printf("Key 3 - animating to 500m scale\n");
+            animate_distance_scale(500);
+            break;
+        case '4':  // 1km scale
+            printf("Key 4 - animating to 1km scale\n");
+            animate_distance_scale(1000);
+            break;
+        case '5':  // 3km scale
+            printf("Key 5 - animating to 3km scale\n");
+            animate_distance_scale(3000);
+            break;
+        case '6':  // 5km scale
+            printf("Key 6 - animating to 5km scale\n");
+            animate_distance_scale(5000);
             break;
         default:
             printf("Unhandled key: %d\n", key);
@@ -695,6 +1341,18 @@ static void compass_update(float yaw_deg)
     lv_obj_set_style_transform_pivot_x(g.needle, CIRCLE_CENTER, 0);
     lv_obj_set_style_transform_pivot_y(g.needle, CIRCLE_CENTER, 0);
 
+    /* Rotate compass face ring image with needle */
+    lv_obj_set_style_transform_angle(g.compass_face_ring_img, (int16_t)(yaw_deg * 10), 0);
+    /* Pivot point is already set to screen center in compass_build() */
+
+    /* Update rotation text display */
+    update_rotation_text(yaw_deg);
+
+    /* Update target markers with new compass rotation */
+    render_target_markers();
+
+
+    /* Center overlay stays fixed - no rotation applied */
 }
 
 static void on_settings_close_anim_ready(lv_anim_t * anim)
@@ -728,4 +1386,72 @@ void update_idle_bottom_text(const char* text)
     if(g.idle_bottom_text) {
         lv_label_set_text(g.idle_bottom_text, text);
     }
+}
+
+/* Public GPS API Functions */
+void gps_add_target(float lat, float lon, uint32_t color)
+{
+    add_target_coord(lat, lon, color);
+}
+
+void gps_add_target_at_distance(float distance_meters, float bearing_degrees, uint32_t color)
+{
+    add_target_at_distance(distance_meters, bearing_degrees, color);
+}
+
+void gps_remove_target(int index)
+{
+    remove_target_coord(index);
+}
+
+void gps_clear_all_targets(void)
+{
+    clear_all_targets();
+}
+
+void gps_set_tracker_position(float lat, float lon)
+{
+    g.self_lat = lat;
+    g.self_lon = lon;
+
+    /* Dynamically update all target positions and distances */
+    update_target_positions_for_new_origin();
+}
+
+int gps_get_target_count(void)
+{
+    return g.target_count;
+}
+
+int gps_get_target_distance(int index)
+{
+    if (index < 0 || index >= g.target_count) return -1;
+    return g.targets[index].distance_meters;
+}
+
+void gps_update_target_markers(void)
+{
+    render_target_markers();
+}
+
+/* Dummy data access functions */
+float gps_get_dummy_self_lat(void)
+{
+    return DUMMY_SELF_LAT;
+}
+
+float gps_get_dummy_self_lon(void)
+{
+    return DUMMY_SELF_LON;
+}
+
+int gps_get_dummy_target_count(void)
+{
+    return DUMMY_TARGET_COUNT;
+}
+
+const void* gps_get_dummy_target(int index)
+{
+    if (index < 0 || index >= DUMMY_TARGET_COUNT) return NULL;
+    return &DUMMY_TARGETS[index];
 }

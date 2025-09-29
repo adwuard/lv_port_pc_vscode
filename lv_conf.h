@@ -29,6 +29,17 @@
 /*Color depth: 8 (A8), 16 (RGB565), 24 (RGB888), 32 (XRGB8888)*/
 #define LV_COLOR_DEPTH 32
 
+#define LV_COLOR_SCREEN_TRANSP 1
+
+
+#if LV_COLOR_DEPTH == 1 || LV_COLOR_DEPTH == 8
+#define LV_IMG_PX_SIZE_ALPHA_BYTE 2
+#elif LV_COLOR_DEPTH == 16
+#define LV_IMG_PX_SIZE_ALPHA_BYTE 3
+#elif LV_COLOR_DEPTH == 32
+#define LV_IMG_PX_SIZE_ALPHA_BYTE 4
+#endif
+
 /*=========================
    STDLIB WRAPPER SETTINGS
  *=========================*/
