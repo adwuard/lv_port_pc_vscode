@@ -40,6 +40,7 @@ void gps_set_tracker_position(float lat, float lon);
 int gps_get_target_count(void);
 int gps_get_target_distance(int index);
 void gps_update_target_markers(void);
+void gps_mark_data_dirty(void);
 
 /* Dummy data access functions */
 float gps_get_dummy_self_lat(void);

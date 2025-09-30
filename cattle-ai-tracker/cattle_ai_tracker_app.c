@@ -99,6 +99,10 @@ typedef struct {
         uint32_t color;
         bool active;
         int distance_meters;
+        /* Performance optimization: cached screen coordinates */
+        float cached_x_meters, cached_y_meters;  /* Cached meter coordinates */
+        float cached_screen_x, cached_screen_y; /* Cached screen pixel coordinates */
+        bool coordinates_dirty;  /* Flag to indicate if coordinates need recalculation */
     } targets[MAX_TARGETS];
     int target_count;
 
@@ -106,6 +110,13 @@ typedef struct {
     float map_scale;  /* meters per pixel */
     lv_obj_t *map_container;
     lv_obj_t *target_markers[MAX_TARGETS];
+
+    /* Performance optimization: cached calculations */
+    float cached_lon_factor;  /* Cached longitude factor for current latitude */
+    float cached_lat_factor;  /* Cached latitude factor */
+    bool gps_data_dirty;      /* Flag to indicate if GPS data has changed */
+    bool map_scale_dirty;     /* Flag to indicate if map scale needs recalculation */
+    float cached_screen_radius; /* Cached screen radius calculation */
 
     /* SOS */
     lv_obj_t *sos_hold_ring;
@@ -145,7 +156,6 @@ static cattle_app_t g;
  **********************/
 static void set_distance_text(int meters);
 static void update_rotation_text(float yaw_degrees);
-static void update_distance_scale(void);
 static void animate_distance_scale(int target_scale);
 static void on_distance_anim_value(void *var, int32_t value);
 static void on_distance_anim_ready(lv_anim_t *anim);
@@ -160,6 +170,9 @@ static void update_map_scale(void);
 static void render_target_markers(void);
 static void update_target_positions(void);
 static void update_target_positions_for_new_origin(void);
+static void update_cached_coordinates(void);
+static void mark_all_coordinates_dirty(void);
+static void on_backdrop_anim(void *var, int32_t value);
 static void create_root(void);
 static void create_idle_screen(void);
 static void create_tracking_screen(void);
@@ -167,7 +180,6 @@ static void create_settings_panel(void);
 static void create_sos_screen(void);
 
 static void show_idle(void);
-static void show_tracking(void);
 static void slide_tracking(bool show);
 static void show_sos_alert(void);
 static void hide_sos_alert(void);
@@ -207,6 +219,10 @@ void lv_demo_cattle_ai_tracker(void)
     g.self_lat = 22.280f; g.self_lon = 114.158f; /* HK */
     g.calibrated = true;  // Start as calibrated to avoid showing calibration panel
     g.yaw_deg = 0.f;
+
+    /* Performance optimization: Initialize cache flags */
+    g.gps_data_dirty = true;  /* Force initial coordinate calculation */
+    g.map_scale_dirty = true;
 
     create_root();
     create_idle_screen();
@@ -502,17 +518,6 @@ static void update_rotation_text(float yaw_degrees)
     lv_label_set_text(g.rotation_text, rotation_str);
 }
 
-static void update_distance_scale(void)
-{
-    /* Update distance text to show current scale */
-    set_distance_text(g.distance_scale_meters);
-
-    /* Update map scale based on new distance scale */
-    update_map_scale();
-
-    /* Re-render all target markers with new scale */
-    render_target_markers();
-}
 
 static void animate_distance_scale(int target_scale)
 {
@@ -554,14 +559,19 @@ static void on_distance_anim_value(void *var, int32_t value)
         }
     }
 
-    /* Update distance text and re-render markers during animation */
-    set_distance_text(g.distance_scale_meters);
-    update_map_scale();
-    update_interval_lines();
-    render_target_markers();
+    /* Performance optimization: Only update UI elements that need it */
+    static int32_t last_value = -1;
+    if (last_value != value) {
+        /* Update distance text and re-render markers during animation */
+        set_distance_text(g.distance_scale_meters);
+        update_map_scale();
+        update_interval_lines();
+        render_target_markers();
 
-    /* Force refresh of the compass container to show interval line changes */
-    lv_obj_invalidate(g.compass_container);
+        /* Force refresh of the compass container to show interval line changes */
+        lv_obj_invalidate(g.compass_container);
+        last_value = value;
+    }
 }
 
 static void on_distance_anim_ready(lv_anim_t *anim)
@@ -661,7 +671,7 @@ static void update_interval_lines(void)
         }
     }
 
-    /* Update all interval lines */
+    /* Performance optimization: Update interval lines without rotation */
     for (int i = 0; i < g.interval_lines_count; i++) {
         if (g.interval_lines[i]) {
             bool should_show = false;
@@ -681,7 +691,6 @@ static void update_interval_lines(void)
                 }
             }
 
-
             if (should_show) {
                 int radius_int = (int)circle_radius;
                 int size = radius_int * 2;
@@ -691,7 +700,13 @@ static void update_interval_lines(void)
                 lv_obj_set_size(g.interval_lines[i], size, size);
                 lv_obj_set_pos(g.interval_lines[i], pos, pos);
                 lv_obj_set_style_radius(g.interval_lines[i], radius_int, 0);
-                lv_obj_invalidate(g.interval_lines[i]);
+
+                /* Performance: Only invalidate if actually changed */
+                static float last_radius[12] = {0};
+                if (last_radius[i] != circle_radius) {
+                    lv_obj_invalidate(g.interval_lines[i]);
+                    last_radius[i] = circle_radius;
+                }
             } else {
                 lv_obj_add_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
             }
@@ -979,28 +994,33 @@ static void update_target_positions(void)
     /* Only update positions of existing markers - don't recreate them */
     if (g.target_count == 0) return;
 
-    /* Calculate screen radius for boundary checking */
-    float screen_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
+    /* Update cached coordinates if GPS data has changed */
+    update_cached_coordinates();
 
-    /* Update existing markers */
+    /* Pre-calculate rotation values once for all targets */
+    float angle_rad = -g.yaw_deg * M_PI / 180.0f;
+    float cos_angle = cosf(angle_rad);
+    float sin_angle = sinf(angle_rad);
+
+    /* Use cached screen radius */
+    float screen_radius = g.cached_screen_radius;
+
+    /* Update existing markers using cached coordinates */
     for (int i = 0; i < g.target_count; i++) {
         if (!g.targets[i].active || !g.target_markers[i]) continue;
 
-        /* Calculate relative position */
-        float delta_lat = g.targets[i].lat - g.self_lat;
-        float delta_lon = g.targets[i].lon - g.self_lon;
-
-        /* Convert to screen coordinates (meters to pixels) - dynamic calculation */
-        float lat_factor = 111320.0f;  /* meters per degree latitude */
-        float lon_factor = 111320.0f * cosf(g.self_lat * M_PI / 180.0f);  /* meters per degree longitude at current latitude */
-
-        float x_meters = delta_lon * lon_factor;
-        float y_meters = delta_lat * lat_factor;
-
-        /* Apply compass rotation to target positions (negate angle for correct direction) */
-        float angle_rad = -g.yaw_deg * M_PI / 180.0f;
-        float cos_angle = cosf(angle_rad);
-        float sin_angle = sinf(angle_rad);
+        /* Use cached meter coordinates if available and not dirty */
+        float x_meters, y_meters;
+        if (!g.targets[i].coordinates_dirty) {
+            x_meters = g.targets[i].cached_x_meters;
+            y_meters = g.targets[i].cached_y_meters;
+        } else {
+            /* Fallback to calculation if cache is dirty */
+            float delta_lat = g.targets[i].lat - g.self_lat;
+            float delta_lon = g.targets[i].lon - g.self_lon;
+            x_meters = delta_lon * g.cached_lon_factor;
+            y_meters = delta_lat * g.cached_lat_factor;
+        }
 
         /* Rotate the target position relative to compass */
         float rotated_x = x_meters * cos_angle - y_meters * sin_angle;
@@ -1070,9 +1090,61 @@ static void update_target_positions_for_new_origin(void)
         g.targets[i].distance_meters = (int)calculate_distance(g.self_lat, g.self_lon, g.targets[i].lat, g.targets[i].lon);
     }
 
+    /* Mark all coordinates as dirty when origin changes */
+    mark_all_coordinates_dirty();
+
     /* Update map scale and re-render markers */
     update_map_scale();
     render_target_markers();
+}
+
+/* Performance optimization: Update cached coordinates only when GPS data changes */
+static void update_cached_coordinates(void)
+{
+    if (!g.gps_data_dirty) return;
+
+    /* Update cached factors for current GPS position */
+    g.cached_lat_factor = 111320.0f;  /* meters per degree latitude */
+    g.cached_lon_factor = 111320.0f * cosf(g.self_lat * M_PI / 180.0f);
+
+    /* Update cached screen radius */
+    g.cached_screen_radius = (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
+
+    /* Update cached coordinates for all active targets */
+    for (int i = 0; i < g.target_count; i++) {
+        if (!g.targets[i].active) continue;
+
+        /* Calculate relative position in meters */
+        float delta_lat = g.targets[i].lat - g.self_lat;
+        float delta_lon = g.targets[i].lon - g.self_lon;
+
+        g.targets[i].cached_x_meters = delta_lon * g.cached_lon_factor;
+        g.targets[i].cached_y_meters = delta_lat * g.cached_lat_factor;
+        g.targets[i].coordinates_dirty = false;
+    }
+
+    g.gps_data_dirty = false;
+}
+
+/* Mark all target coordinates as dirty when GPS data changes */
+static void mark_all_coordinates_dirty(void)
+{
+    for (int i = 0; i < g.target_count; i++) {
+        g.targets[i].coordinates_dirty = true;
+    }
+    g.gps_data_dirty = true;
+}
+
+/* Public function to mark GPS data as dirty when it changes */
+void gps_mark_data_dirty(void)
+{
+    mark_all_coordinates_dirty();
+}
+
+/* Animation callback wrapper for backdrop opacity */
+static void on_backdrop_anim(void *var, int32_t value)
+{
+    lv_obj_set_style_bg_opa((lv_obj_t*)var, (lv_opa_t)value, 0);
 }
 
 static void create_tracking_screen(void)
@@ -1104,7 +1176,7 @@ static void create_tracking_screen(void)
     g.map_scale = 1.0f;
 
     /* Add dummy targets from data structure using actual GPS coordinates */
-    for (int i = 0; i < DUMMY_TARGET_COUNT; i++) {
+    for (int i = 0; i < (int)DUMMY_TARGET_COUNT; i++) {
         add_target_coord(DUMMY_TARGETS[i].lat,
                         DUMMY_TARGETS[i].lon,
                         DUMMY_TARGETS[i].color);
@@ -1290,10 +1362,6 @@ static void show_idle(void)
     lv_anim_start(&a);
 }
 
-static void show_tracking(void)
-{
-    slide_tracking(true);
-}
 
 static void show_sos_alert(void)
 {
@@ -1332,7 +1400,7 @@ static void slide_settings(bool open)
         lv_anim_t b; lv_anim_init(&b);
         lv_anim_set_var(&b, g.settings_backdrop);
         lv_anim_set_values(&b, LV_OPA_TRANSP, LV_OPA_30);
-        lv_anim_set_exec_cb(&b, (lv_anim_exec_xcb_t)lv_obj_set_style_bg_opa);
+        lv_anim_set_exec_cb(&b, on_backdrop_anim);
         lv_anim_set_time(&b, 300);
         lv_anim_set_early_apply(&b, true);
         lv_anim_start(&b);
@@ -1353,7 +1421,7 @@ static void slide_settings(bool open)
         lv_anim_t b; lv_anim_init(&b);
         lv_anim_set_var(&b, g.settings_backdrop);
         lv_anim_set_values(&b, LV_OPA_30, LV_OPA_TRANSP);
-        lv_anim_set_exec_cb(&b, (lv_anim_exec_xcb_t)lv_obj_set_style_bg_opa);
+        lv_anim_set_exec_cb(&b, on_backdrop_anim);
         lv_anim_set_time(&b, 300);
         lv_anim_set_early_apply(&b, true);
         lv_anim_start(&b);
@@ -1410,6 +1478,7 @@ static void on_settings_drag(lv_event_t *e)
 
 static void on_gesture(lv_event_t *e)
 {
+    (void)e;  /* Suppress unused parameter warning */
     lv_indev_t *indev = lv_indev_get_act();
     lv_indev_type_t indev_type = lv_indev_get_type(indev);
 
@@ -1550,23 +1619,25 @@ static void on_released(lv_event_t *e)
     g.sos_pressed_start_ms = 0;
 }
 
-static void on_sos_cancel(lv_event_t *e)
-{
-    (void)e;
-    hide_sos_alert();
-}
 
 /* Calibration function removed - no longer needed */
 
 static void compass_update(float yaw_deg)
 {
+    /* Performance optimization: Only update if angle actually changed */
+    static float last_yaw = -999.0f;  /* Initialize to impossible value */
+    if (fabsf(yaw_deg - last_yaw) < 0.1f) return;  /* Skip if change is negligible */
+    last_yaw = yaw_deg;
+
+    int16_t angle_int = (int16_t)(yaw_deg * 10);
+
     /* Rotate needle */
-    lv_obj_set_style_transform_angle(g.needle, (int16_t)(yaw_deg * 10), 0);
+    lv_obj_set_style_transform_angle(g.needle, angle_int, 0);
     lv_obj_set_style_transform_pivot_x(g.needle, CIRCLE_CENTER, 0);
     lv_obj_set_style_transform_pivot_y(g.needle, CIRCLE_CENTER, 0);
 
     /* Rotate compass face ring image with needle */
-    lv_obj_set_style_transform_angle(g.compass_face_ring_img, (int16_t)(yaw_deg * 10), 0);
+    lv_obj_set_style_transform_angle(g.compass_face_ring_img, angle_int, 0);
     /* Pivot point is already set to screen center in compass_build() */
 
     /* Update rotation text display */
@@ -1596,7 +1667,9 @@ static void on_settings_close_anim_ready(lv_anim_t * anim)
 }
 
 static float wrap_deg(float d){
-    while(d < 0) d += 360.f; while(d >= 360.f) d -= 360.f; return d;
+    while(d < 0) d += 360.f;
+    while(d >= 360.f) d -= 360.f;
+    return d;
 }
 
 static void on_tick(lv_timer_t *t)
@@ -1680,7 +1753,7 @@ int gps_get_dummy_target_count(void)
 
 const void* gps_get_dummy_target(int index)
 {
-    if (index < 0 || index >= DUMMY_TARGET_COUNT) return NULL;
+    if (index < 0 || index >= (int)DUMMY_TARGET_COUNT) return NULL;
     return &DUMMY_TARGETS[index];
 }
 
@@ -1834,7 +1907,7 @@ static void hide_close_range_mode(void)
     }
 
     /* Restore dummy targets when exiting close-range mode */
-    for (int i = 0; i < DUMMY_TARGET_COUNT; i++) {
+    for (int i = 0; i < (int)DUMMY_TARGET_COUNT; i++) {
         add_target_coord(DUMMY_TARGETS[i].lat,
                         DUMMY_TARGETS[i].lon,
                         DUMMY_TARGETS[i].color);
