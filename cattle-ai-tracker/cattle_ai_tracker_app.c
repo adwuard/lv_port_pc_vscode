@@ -417,6 +417,7 @@ static void compass_build(lv_obj_t *parent)
      lv_img_set_src(g.compass_center_overlay, &compass_center_find);
      lv_obj_set_size(g.compass_center_overlay, 466, 466); /* Set actual image size */
      lv_obj_center(g.compass_center_overlay);
+     lv_obj_set_y(g.compass_center_overlay, lv_obj_get_y(g.compass_center_overlay) - 55); /* Move up 10 pixels */
      lv_obj_clear_flag(g.compass_center_overlay, LV_OBJ_FLAG_CLICKABLE);
      lv_obj_clear_flag(g.compass_center_overlay, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -676,18 +677,18 @@ static void on_tracking_drag(lv_event_t *e)
 
  static void update_interval_lines(void)
  {
-     /* Calculate screen radius for maximum circle */
-     float max_radius =
-         (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 15;
-     float min_radius = 20; /* Minimum radius for visible circles */
+    /* Calculate screen radius for maximum circle */
+    float max_radius =
+        (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 15;
+    float min_radius = 20; /* Minimum radius for visible circles */
 
-     /* Calculate the map scale - same as used for target markers */
-     static float cached_screen_radius = 0;
-     static float cached_map_scale = 0;
-     static int cached_distance_scale = 0;
+    /* Calculate the map scale - same as used for target markers */
+    static float cached_screen_radius = 0;
+    static float cached_map_scale = 0;
+    static int cached_distance_scale = 0;
 
-     float screen_radius =
-         (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 50;
+    float screen_radius =
+        (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 60;
      float map_scale;
 
      /* Cache map scale calculation to avoid redundant computation */
@@ -739,32 +740,32 @@ static void on_tracking_drag(lv_event_t *e)
      int visible_count = 0;
      int selected_indices[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
-     /* Select intervals that fit within screen bounds */
-     for (int i = 0; i < interval_count && visible_count < 12; i++) {
-         float distance = dynamic_intervals[i];
-         float circle_radius = distance / map_scale;
+    /* Select intervals that fit within screen bounds */
+    for (int i = 0; i < interval_count && visible_count < 12; i++) {
+        float distance = dynamic_intervals[i];
+        float circle_radius = distance / map_scale;
 
-         /* Only select intervals that are within reasonable bounds */
-         if (circle_radius >= min_radius && circle_radius <= max_radius) {
-             selected_indices[visible_count] = i;
-             visible_count++;
-         }
-     }
+        /* Only select intervals that are within reasonable bounds */
+        if (circle_radius >= min_radius && circle_radius <= max_radius) {
+            selected_indices[visible_count] = i;
+            visible_count++;
+        }
+    }
 
-     /* Ensure we have at least 3 ticks if possible */
-     if (visible_count < 3) {
-         /* Try to find at least 3 intervals even if they're slightly outside bounds */
-         for (int i = 0; i < interval_count && visible_count < 3; i++) {
-             float distance = dynamic_intervals[i];
-             float circle_radius = distance / map_scale;
+    /* Ensure we have at least 3 ticks if possible */
+    if (visible_count < 3) {
+        /* Try to find at least 3 intervals even if they're slightly outside bounds */
+        for (int i = 0; i < interval_count && visible_count < 3; i++) {
+            float distance = dynamic_intervals[i];
+            float circle_radius = distance / map_scale;
 
-             /* Allow slightly smaller circles to ensure we have at least 3 */
-             if (circle_radius >= min_radius * 0.8f && circle_radius <= max_radius * 1.2f) {
-                 selected_indices[visible_count] = i;
-                 visible_count++;
-             }
-         }
-     }
+            /* Allow slightly smaller circles to ensure we have at least 3 */
+            if (circle_radius >= min_radius * 0.8f && circle_radius <= max_radius * 1.2f) {
+                selected_indices[visible_count] = i;
+                visible_count++;
+            }
+        }
+    }
 
      /* Performance optimization: Update interval lines without rotation */
      for (int i = 0; i < g.interval_lines_count; i++) {
@@ -788,15 +789,16 @@ static void on_tracking_drag(lv_event_t *e)
                  }
              }
 
-             if (should_show) {
-                 int radius_int = (int)circle_radius;
-                 int size = radius_int * 2;
-                 int pos = CIRCLE_CENTER - radius_int;
+            if (should_show) {
 
-                 lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
-                 lv_obj_set_size(g.interval_lines[i], size, size);
-                 lv_obj_set_pos(g.interval_lines[i], pos, pos);
-                 lv_obj_set_style_radius(g.interval_lines[i], radius_int, 0);
+                int radius_int = (int)circle_radius;
+                int size = radius_int * 2;
+                int pos = CIRCLE_CENTER - radius_int;
+
+                lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_size(g.interval_lines[i], size, size);
+                lv_obj_set_pos(g.interval_lines[i], pos, pos);
+                lv_obj_set_style_radius(g.interval_lines[i], radius_int, 0);
 
                  /* Performance: Only invalidate if actually changed */
                  static float last_radius[12] = {0};
