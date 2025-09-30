@@ -17,7 +17,8 @@ typedef enum {
     TARGET_COLOR_YELLOW = 0xFFA000,  /* 黄 - Yellow */
     TARGET_COLOR_PINK = 0xEC8FD4,    /* 粉 - Pink */
     TARGET_COLOR_CYAN = 0x78CFD1,    /* 青 - Cyan */
-    TARGET_COLOR_PURPLE = 0x8A66F9   /* 紫 - Purple */
+    TARGET_COLOR_PURPLE = 0x8A66F9,  /* 紫 - Purple */
+    TARGET_COLOR_COW = 0x6A6AF2      /* 牛 - Cow (special marker) */
 } target_color_t;
 
 #ifndef CATTLE_SCREEN_WIDTH
