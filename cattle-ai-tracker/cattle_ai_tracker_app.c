@@ -15,6 +15,9 @@
 #include "resources/compass_center_find.c"
 #include "resources/diatance.c"
 #include "resources/compass_cow_loc.c"
+#include "resources/closing_nav_arrow.c"
+#include "resources/closing_nav_ring.c"
+#include "resources/closing_nav_cow_icon.c"
 
 /*********************
  *      DEFINES
@@ -119,6 +122,20 @@ typedef struct {
 
     /* Idle screen bottom text */
     lv_obj_t *idle_bottom_text;
+
+    /* Close-range navigation mode */
+    bool close_range_mode;
+    lv_obj_t *close_nav_container;
+    lv_obj_t *close_nav_ring_img;
+    lv_obj_t *close_nav_arrow_img;
+    lv_obj_t *close_nav_cow_icon_img;
+    lv_obj_t *close_nav_distance_text;
+    lv_obj_t *close_nav_compass_text;
+    lv_obj_t *found_circle;
+    lv_obj_t *found_cow_icon;
+    lv_obj_t *found_text;
+    lv_anim_t *close_nav_zoom_anim;
+    bool close_nav_zooming_out;
 } cattle_app_t;
 
 static cattle_app_t g;
@@ -154,6 +171,12 @@ static void show_tracking(void);
 static void slide_tracking(bool show);
 static void show_sos_alert(void);
 static void hide_sos_alert(void);
+static void show_close_range_mode(void);
+static void hide_close_range_mode(void);
+static void create_close_range_ui(void);
+static void update_close_range_arrow(void);
+static void on_close_nav_zoom_anim(void *var, int32_t value);
+static void on_close_nav_zoom_ready(lv_anim_t *anim);
 
 static void on_keyboard(lv_event_t *e);
 static void on_pressed(lv_event_t *e);
@@ -520,6 +543,17 @@ static void on_distance_anim_value(void *var, int32_t value)
     /* Update the distance scale with the animated value */
     g.distance_scale_meters = (int)value;
 
+    /* Check for close-range mode transition */
+    bool should_be_close_range = (g.distance_scale_meters < 100);
+    if (should_be_close_range != g.close_range_mode) {
+        g.close_range_mode = should_be_close_range;
+        if (g.close_range_mode) {
+            show_close_range_mode();
+        } else {
+            hide_close_range_mode();
+        }
+    }
+
     /* Update distance text and re-render markers during animation */
     set_distance_text(g.distance_scale_meters);
     update_map_scale();
@@ -802,6 +836,18 @@ static void update_map_scale(void)
 
 static void render_target_markers(void)
 {
+    /* Don't render markers in close-range mode */
+    if (g.close_range_mode) {
+        /* Clear existing markers */
+        for (int i = 0; i < MAX_TARGETS; i++) {
+            if (g.target_markers[i]) {
+                lv_obj_del(g.target_markers[i]);
+                g.target_markers[i] = NULL;
+            }
+        }
+        return;
+    }
+
     /* Clear existing markers */
     for (int i = 0; i < MAX_TARGETS; i++) {
         if (g.target_markers[i]) {
@@ -925,6 +971,11 @@ static void render_target_markers(void)
 
 static void update_target_positions(void)
 {
+    /* Don't update markers in close-range mode */
+    if (g.close_range_mode) {
+        return;
+    }
+
     /* Only update positions of existing markers - don't recreate them */
     if (g.target_count == 0) return;
 
@@ -1006,6 +1057,11 @@ static void update_target_positions(void)
 
 static void update_target_positions_for_new_origin(void)
 {
+    /* Don't update markers in close-range mode */
+    if (g.close_range_mode) {
+        return;
+    }
+
     /* Recalculate all target positions based on new tracker origin */
     for (int i = 0; i < g.target_count; i++) {
         if (!g.targets[i].active) continue;
@@ -1519,6 +1575,10 @@ static void compass_update(float yaw_deg)
     /* Update target positions with new compass rotation */
     update_target_positions();
 
+    /* Update close-range navigation if active */
+    if (g.close_range_mode) {
+        update_close_range_arrow();
+    }
 
     /* Center overlay stays fixed - no rotation applied */
 }
@@ -1622,4 +1682,245 @@ const void* gps_get_dummy_target(int index)
 {
     if (index < 0 || index >= DUMMY_TARGET_COUNT) return NULL;
     return &DUMMY_TARGETS[index];
+}
+
+/**********************
+ * CLOSE-RANGE NAVIGATION MODE
+ **********************/
+
+static void create_close_range_ui(void)
+{
+    /* Create close-range navigation container */
+    g.close_nav_container = lv_obj_create(g.tracking_screen);
+    lv_obj_set_size(g.close_nav_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_opa(g.close_nav_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g.close_nav_container, 0, 0);  /* Remove border */
+    lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Set transform pivot to center for proper scaling */
+    lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
+    lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
+
+    lv_obj_center(g.close_nav_container);
+    lv_obj_add_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);  /* Initially hidden */
+
+    /* Create black circle background */
+    lv_obj_t *black_circle = lv_obj_create(g.close_nav_container);
+    lv_obj_set_size(black_circle, 466, 466);
+    lv_obj_set_style_bg_color(black_circle, lv_color_black(), 0);
+    lv_obj_set_style_radius(black_circle, 233, 0);  /* 466/2 = 233 for perfect circle */
+    lv_obj_set_style_border_width(black_circle, 0, 0);  /* Remove border */
+    lv_obj_set_style_border_color(black_circle, lv_color_black(), 0); /* Set border color to black */
+    lv_obj_center(black_circle);
+
+    /* Create the navigation ring */
+    g.close_nav_ring_img = lv_img_create(g.close_nav_container);
+    lv_img_set_src(g.close_nav_ring_img, &closing_nav_ring);
+    lv_obj_center(g.close_nav_ring_img);
+
+    /* Create the navigation arrow */
+    g.close_nav_arrow_img = lv_img_create(g.close_nav_container);
+    lv_img_set_src(g.close_nav_arrow_img, &closing_nav_arrow);
+    lv_obj_center(g.close_nav_arrow_img);
+
+    /* Set transform pivot to screen center for proper rotation */
+    lv_obj_set_style_transform_pivot_x(g.close_nav_arrow_img, CATTLE_SCREEN_WIDTH / 2, 0);
+    lv_obj_set_style_transform_pivot_y(g.close_nav_arrow_img, CATTLE_SCREEN_HEIGHT / 2, 0);
+
+    /* Create distance text */
+    g.close_nav_distance_text = lv_label_create(g.close_nav_container);
+    lv_obj_set_style_text_color(g.close_nav_distance_text, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.close_nav_distance_text, &lv_font_montserrat_24, 0);
+    lv_obj_align(g.close_nav_distance_text, LV_ALIGN_TOP_MID, 0, 20);
+
+    /* Create compass text */
+    g.close_nav_compass_text = lv_label_create(g.close_nav_container);
+    lv_obj_set_style_text_color(g.close_nav_compass_text, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.close_nav_compass_text, &lv_font_montserrat_16, 0);
+    lv_obj_align(g.close_nav_compass_text, LV_ALIGN_BOTTOM_MID, 0, -20);
+
+
+    /* Create found state elements (initially hidden) */
+    g.found_circle = lv_obj_create(g.close_nav_container);
+    lv_obj_set_size(g.found_circle, 200, 200);
+    lv_obj_set_style_bg_color(g.found_circle, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_style_radius(g.found_circle, 100, 0);
+    lv_obj_center(g.found_circle);
+    lv_obj_add_flag(g.found_circle, LV_OBJ_FLAG_HIDDEN);
+
+    g.found_text = lv_label_create(g.found_circle);
+    lv_label_set_text(g.found_text, "HERE");
+    lv_obj_set_style_text_color(g.found_text, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.found_text, &lv_font_montserrat_20, 0);
+    lv_obj_align(g.found_text, LV_ALIGN_TOP_MID, 0, 20);
+
+    g.found_cow_icon = lv_img_create(g.found_circle);
+    lv_img_set_src(g.found_cow_icon, &closing_nav_cow_icon);
+    lv_obj_center(g.found_cow_icon);
+}
+
+static void show_close_range_mode(void)
+{
+    if (!g.close_nav_container) {
+        create_close_range_ui();
+    }
+
+    /* Clear all dummy targets when entering close-range mode */
+    clear_all_targets();
+
+    /* Set transform pivot to center of screen for proper scaling */
+    lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
+    lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
+
+    /* Start with small scale for zoom-in animation */
+    lv_obj_set_style_transform_zoom(g.close_nav_container, 128, 0);  /* 128 = 0.5x scale (small) */
+    lv_obj_center(g.close_nav_container);
+
+    /* Show close-range navigation */
+    lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);
+
+    /* Hide compass elements */
+    lv_obj_add_flag(g.compass_container, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g.distance_img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g.distance_text, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g.rotation_bg, LV_OBJ_FLAG_HIDDEN);
+
+    /* Start zoom-in animation */
+    if (g.close_nav_zoom_anim) {
+        lv_anim_del(g.close_nav_zoom_anim, NULL);
+    }
+    g.close_nav_zooming_out = false;  /* This is a zoom-in animation */
+    static lv_anim_t zoom_anim;
+    g.close_nav_zoom_anim = &zoom_anim;
+    lv_anim_init(g.close_nav_zoom_anim);
+    lv_anim_set_var(g.close_nav_zoom_anim, g.close_nav_container);
+    lv_anim_set_values(g.close_nav_zoom_anim, 128, 256);  /* From 0.5x to 1.0x scale */
+    lv_anim_set_time(g.close_nav_zoom_anim, 250);  /* 250ms animation - faster */
+    lv_anim_set_exec_cb(g.close_nav_zoom_anim, on_close_nav_zoom_anim);
+    lv_anim_set_ready_cb(g.close_nav_zoom_anim, on_close_nav_zoom_ready);
+    lv_anim_set_path_cb(g.close_nav_zoom_anim, lv_anim_path_ease_out);
+    lv_anim_start(g.close_nav_zoom_anim);
+
+    /* Update close-range UI */
+    update_close_range_arrow();
+}
+
+static void hide_close_range_mode(void)
+{
+    if (g.close_nav_container) {
+        /* Ensure transform pivot is set to center for proper scaling */
+        lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
+        lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
+
+        /* Start zoom-out animation */
+        if (g.close_nav_zoom_anim) {
+            lv_anim_del(g.close_nav_zoom_anim, NULL);
+        }
+        g.close_nav_zooming_out = true;  /* This is a zoom-out animation */
+        static lv_anim_t zoom_out_anim;
+        g.close_nav_zoom_anim = &zoom_out_anim;
+        lv_anim_init(g.close_nav_zoom_anim);
+        lv_anim_set_var(g.close_nav_zoom_anim, g.close_nav_container);
+        lv_anim_set_values(g.close_nav_zoom_anim, 256, 128);  /* From 1.0x to 0.5x scale */
+        lv_anim_set_time(g.close_nav_zoom_anim, 250);  /* 100ms animation - half the time */
+        lv_anim_set_exec_cb(g.close_nav_zoom_anim, on_close_nav_zoom_anim);
+        lv_anim_set_ready_cb(g.close_nav_zoom_anim, on_close_nav_zoom_ready);
+        lv_anim_set_path_cb(g.close_nav_zoom_anim, lv_anim_path_ease_in);
+        lv_anim_start(g.close_nav_zoom_anim);
+
+        /* Don't hide immediately - let the animation complete first */
+        /* The hiding will be handled in the animation ready callback */
+    }
+
+    /* Restore dummy targets when exiting close-range mode */
+    for (int i = 0; i < DUMMY_TARGET_COUNT; i++) {
+        add_target_coord(DUMMY_TARGETS[i].lat,
+                        DUMMY_TARGETS[i].lon,
+                        DUMMY_TARGETS[i].color);
+    }
+    update_map_scale();
+    render_target_markers();
+
+    /* Show compass elements */
+    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g.distance_img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g.distance_text, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g.rotation_bg, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void update_close_range_arrow(void)
+{
+    if (!g.close_nav_arrow_img || !g.close_range_mode) return;
+
+    /* Use main compass angle for rotation */
+    float compass_angle = g.yaw_deg;
+
+    /* Use a fixed distance for close-range mode */
+    float distance = 50.0f;  /* Fixed 50m distance for close-range display */
+
+    /* Update distance text */
+    char distance_str[32];
+    snprintf(distance_str, sizeof(distance_str), "Distance: %.0fM", distance);
+    lv_label_set_text(g.close_nav_distance_text, distance_str);
+
+    /* Update compass text */
+    char compass_str[32];
+    int degrees = (int)roundf(compass_angle);
+    const char* direction;
+    if (degrees >= 337.5f || degrees < 22.5f) {
+        direction = "N";
+    } else if (degrees >= 22.5f && degrees < 67.5f) {
+        direction = "NE";
+    } else if (degrees >= 67.5f && degrees < 112.5f) {
+        direction = "E";
+    } else if (degrees >= 112.5f && degrees < 157.5f) {
+        direction = "SE";
+    } else if (degrees >= 157.5f && degrees < 202.5f) {
+        direction = "S";
+    } else if (degrees >= 202.5f && degrees < 247.5f) {
+        direction = "SW";
+    } else if (degrees >= 247.5f && degrees < 292.5f) {
+        direction = "W";
+    } else {
+        direction = "NW";
+    }
+    snprintf(compass_str, sizeof(compass_str), "%s-%d°", direction, degrees);
+    lv_label_set_text(g.close_nav_compass_text, compass_str);
+
+    /* Set pivot to center of the arrow image for proper rotation */
+    lv_coord_t arrow_w = lv_obj_get_width(g.close_nav_arrow_img);
+    lv_coord_t arrow_h = lv_obj_get_height(g.close_nav_arrow_img);
+    lv_obj_set_style_transform_pivot_x(g.close_nav_arrow_img, arrow_w / 2, 0);
+    lv_obj_set_style_transform_pivot_y(g.close_nav_arrow_img, arrow_h / 2, 0);
+
+    /* Align the arrow image center to the screen center */
+    lv_obj_align(g.close_nav_arrow_img, LV_ALIGN_CENTER, 0, 0);
+
+    /* Rotate only the navigation arrow based on compass angle */
+    lv_obj_set_style_transform_angle(g.close_nav_arrow_img, compass_angle * 10, 0);
+
+    /* Dots removed for clean close-range navigation */
+}
+
+
+static void on_close_nav_zoom_anim(void *var, int32_t value)
+{
+    lv_obj_t *container = (lv_obj_t *)var;
+    lv_obj_set_style_transform_zoom(container, value, 0);
+}
+
+static void on_close_nav_zoom_ready(lv_anim_t *anim)
+{
+    (void)anim;
+    /* Animation complete - check if this was a zoom-out animation */
+    if (g.close_nav_zooming_out) {
+        /* This is a zoom-out animation - hide the container */
+        if (g.close_nav_container) {
+            lv_obj_add_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);
+        }
+    } else {
+        /* This is a zoom-in animation - ensure final scale is set */
+        lv_obj_set_style_transform_zoom(g.close_nav_container, 256, 0);  /* 1.0x scale */
+    }
 }
