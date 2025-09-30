@@ -170,6 +170,7 @@
  /**********************
   *  STATIC PROTOTYPES
   **********************/
+ static void clamp_input_coordinates(lv_point_t *point);
  static void set_distance_text(int meters);
  static void update_rotation_text(float yaw_degrees);
  static void __attribute__((unused)) update_distance_scale(void);
@@ -307,33 +308,62 @@
  /**********************
   *   STATIC FUNCTIONS
   **********************/
- static void create_root(void)
+
+ static void clamp_input_coordinates(lv_point_t *point)
  {
-     g.screen = lv_obj_create(NULL);
-     lv_obj_set_size(g.screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_set_style_bg_color(g.screen, lv_color_hex(0x101214), 0);
-     lv_obj_set_style_bg_opa(g.screen, LV_OPA_COVER, 0);
-
-     /* Circular viewport centered - no border */
-     g.viewport = lv_obj_create(g.screen);
-     lv_obj_set_size(g.viewport, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_center(g.viewport);
-     lv_obj_set_style_radius(g.viewport, CIRCLE_RADIUS, 0);
-     lv_obj_set_style_clip_corner(g.viewport, true, 0);
-     lv_obj_set_style_border_width(g.viewport, 0, 0);
-     lv_obj_set_style_bg_color(g.viewport, lv_color_black(), 0);
-     lv_obj_set_style_bg_opa(g.viewport, LV_OPA_COVER, 0);
-
-     lv_screen_load(g.screen);
+     /* Clamp coordinates to 466x466 constraint */
+     if (point->x < 0) point->x = 0;
+     if (point->x >= CATTLE_SCREEN_WIDTH) point->x = CATTLE_SCREEN_WIDTH - 1;
+     if (point->y < 0) point->y = 0;
+     if (point->y >= CATTLE_SCREEN_HEIGHT) point->y = CATTLE_SCREEN_HEIGHT - 1;
  }
+static void create_root(void)
+{
+    g.screen = lv_obj_create(NULL);
+    lv_obj_set_size(g.screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_color(g.screen, lv_color_hex(0x101214), 0);
+    lv_obj_set_style_bg_opa(g.screen, LV_OPA_COVER, 0);
 
- static void create_idle_screen(void)
- {
-     g.idle_screen = lv_obj_create(g.screen);
-     lv_obj_remove_style_all(g.idle_screen);
-     lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
-     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
+    /* Disable scrolling on main screen to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+
+    /* Circular viewport centered - no border */
+    g.viewport = lv_obj_create(g.screen);
+    lv_obj_set_size(g.viewport, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_center(g.viewport);
+    lv_obj_set_style_radius(g.viewport, CIRCLE_RADIUS, 0);
+    lv_obj_set_style_clip_corner(g.viewport, true, 0);
+    lv_obj_set_style_border_width(g.viewport, 0, 0);
+    lv_obj_set_style_bg_color(g.viewport, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(g.viewport, LV_OPA_COVER, 0);
+
+    /* Disable scrolling on viewport to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_CHAIN);
+
+    lv_screen_load(g.screen);
+}
+
+static void create_idle_screen(void)
+{
+    g.idle_screen = lv_obj_create(g.screen);
+    lv_obj_remove_style_all(g.idle_screen);
+    lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Disable all scrolling flags to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
 
      /* Center label */
      lv_obj_t *label = lv_label_create(g.idle_screen);
@@ -352,12 +382,18 @@
      lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, -50);
  }
 
- static void compass_build(lv_obj_t *parent)
- {
-     g.compass_container = lv_obj_create(parent);
-     lv_obj_remove_style_all(g.compass_container);
-     lv_obj_set_size(g.compass_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLLABLE);
+static void compass_build(lv_obj_t *parent)
+{
+    g.compass_container = lv_obj_create(parent);
+    lv_obj_remove_style_all(g.compass_container);
+    lv_obj_set_size(g.compass_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Disable all scrolling flags to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_CHAIN);
 
      /* Compass face ring image - replaces white ring and labels */
      g.compass_face_ring_img = lv_img_create(g.compass_container);
@@ -435,11 +471,14 @@
      }
  }
 
- static void on_tracking_drag(lv_event_t *e)
- {
-     lv_indev_t *indev = lv_indev_get_act();
-     lv_point_t point;
-     lv_indev_get_point(indev, &point);
+static void on_tracking_drag(lv_event_t *e)
+{
+    lv_indev_t *indev = lv_indev_get_act();
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+
+    /* Clamp input coordinates to 466x466 constraint */
+    clamp_input_coordinates(&point);
 
      /* Get current screen position */
      lv_coord_t current_x = lv_obj_get_x(g.tracking_screen);
@@ -1216,30 +1255,43 @@
      mark_all_coordinates_dirty();
  }
 
- static void create_tracking_screen(void)
- {
-     g.tracking_screen = lv_obj_create(g.screen);
-     lv_obj_remove_style_all(g.tracking_screen);
-     lv_obj_set_size(g.tracking_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_set_style_bg_opa(g.tracking_screen, LV_OPA_TRANSP, 0);
-     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLLABLE);
+static void create_tracking_screen(void)
+{
+    g.tracking_screen = lv_obj_create(g.screen);
+    lv_obj_remove_style_all(g.tracking_screen);
+    lv_obj_set_size(g.tracking_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_opa(g.tracking_screen, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-     /* Add drag functionality to tracking screen */
-     lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_PRESSING, NULL);
-     lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_RELEASED, NULL);
+    /* Disable all scrolling flags to enforce 466x466 constraint and prevent scrolling during swipe gestures */
+    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+
+    /* Add drag functionality to tracking screen */
+    lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_RELEASED, NULL);
 
      compass_build(g.tracking_screen);
 
-     /* Create map container for GPS targets */
-     g.map_container = lv_obj_create(g.tracking_screen);
-     lv_obj_remove_style_all(g.map_container);
-     lv_obj_set_size(g.map_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_set_style_bg_opa(g.map_container, LV_OPA_TRANSP, 0);
-     lv_obj_set_style_border_width(g.map_container, 0, 0);
-     lv_obj_set_style_pad_all(g.map_container, 0, 0);
-     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_CLICKABLE);
-     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLLABLE);
-     lv_obj_center(g.map_container);
+    /* Create map container for GPS targets */
+    g.map_container = lv_obj_create(g.tracking_screen);
+    lv_obj_remove_style_all(g.map_container);
+    lv_obj_set_size(g.map_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_opa(g.map_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g.map_container, 0, 0);
+    lv_obj_set_style_pad_all(g.map_container, 0, 0);
+    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Disable all scrolling flags to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_CHAIN);
+
+    lv_obj_center(g.map_container);
 
      /* Initialize dummy GPS data from data structure */
      g.self_lat = DUMMY_SELF_LAT;
@@ -1316,16 +1368,23 @@
      /* Don't let backdrop capture keyboard events */
      lv_obj_clear_flag(g.settings_backdrop, LV_OBJ_FLAG_CLICKABLE);
 
-     g.settings_panel = lv_obj_create(g.screen);
-     lv_obj_set_size(g.settings_panel, CATTLE_SCREEN_WIDTH, SETTINGS_PANEL_HEIGHT);
-     lv_obj_align(g.settings_panel, LV_ALIGN_TOP_MID, 0, -SETTINGS_PANEL_HEIGHT);
-     lv_obj_set_style_radius(g.settings_panel, 0, 0);
-     lv_obj_set_style_bg_color(g.settings_panel, lv_color_hex(0x182028), 0);
-     lv_obj_set_style_bg_opa(g.settings_panel, LV_OPA_COVER, 0);
-     lv_obj_set_style_border_width(g.settings_panel, 0, 0);
-     lv_obj_set_style_pad_all(g.settings_panel, 0, 0);
-     /* Don't let settings panel capture keyboard events */
-     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_CLICKABLE);
+    g.settings_panel = lv_obj_create(g.screen);
+    lv_obj_set_size(g.settings_panel, CATTLE_SCREEN_WIDTH, SETTINGS_PANEL_HEIGHT);
+    lv_obj_align(g.settings_panel, LV_ALIGN_TOP_MID, 0, -SETTINGS_PANEL_HEIGHT);
+    lv_obj_set_style_radius(g.settings_panel, 0, 0);
+    lv_obj_set_style_bg_color(g.settings_panel, lv_color_hex(0x182028), 0);
+    lv_obj_set_style_bg_opa(g.settings_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(g.settings_panel, 0, 0);
+    lv_obj_set_style_pad_all(g.settings_panel, 0, 0);
+    /* Don't let settings panel capture keyboard events */
+    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_CLICKABLE);
+
+    /* Disable scrolling on settings panel to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
 
      /* Title */
      lv_obj_t *title = lv_label_create(g.settings_panel);
@@ -1379,15 +1438,22 @@
      lv_obj_align(close_hint, LV_ALIGN_BOTTOM_MID, 0, -30);
  }
 
- static void create_sos_screen(void)
- {
-     g.sos_screen = lv_obj_create(g.screen);
-     lv_obj_remove_style_all(g.sos_screen);
-     lv_obj_set_size(g.sos_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_set_style_bg_color(g.sos_screen, lv_color_hex(0x2a1a1a), 0);
-     lv_obj_set_style_bg_opa(g.sos_screen, LV_OPA_COVER, 0);
-     lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLLABLE);
-     lv_obj_add_flag(g.sos_screen, LV_OBJ_FLAG_HIDDEN);
+static void create_sos_screen(void)
+{
+    g.sos_screen = lv_obj_create(g.screen);
+    lv_obj_remove_style_all(g.sos_screen);
+    lv_obj_set_size(g.sos_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_color(g.sos_screen, lv_color_hex(0x2a1a1a), 0);
+    lv_obj_set_style_bg_opa(g.sos_screen, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Disable all scrolling flags to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+
+    lv_obj_add_flag(g.sos_screen, LV_OBJ_FLAG_HIDDEN);
 
      lv_obj_t *title = lv_label_create(g.sos_screen);
      lv_label_set_text(title, "SOS Active\n\nPress 'X' to cancel");
@@ -1506,11 +1572,14 @@
      }
  }
 
- static void on_settings_drag(lv_event_t *e)
- {
-     lv_indev_t *indev = lv_indev_get_act();
-     lv_point_t point;
-     lv_indev_get_point(indev, &point);
+static void on_settings_drag(lv_event_t *e)
+{
+    lv_indev_t *indev = lv_indev_get_act();
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+
+    /* Clamp input coordinates to 466x466 constraint */
+    clamp_input_coordinates(&point);
 
      /* Get current panel position */
      lv_coord_t current_y = lv_obj_get_y(g.settings_panel);
@@ -1578,14 +1647,22 @@
                  slide_settings(true);
              }
              break;
-         case LV_DIR_LEFT: // Swipe left - tracking screen
-             printf("Swipe left - showing tracking\n");
-             slide_tracking(true);
-             break;
-         case LV_DIR_RIGHT: // Swipe right - idle screen
-             printf("Swipe right - showing idle\n");
-             show_idle();
-             break;
+        case LV_DIR_LEFT: // Swipe left - tracking screen
+            if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
+                printf("Swipe left - showing tracking\n");
+                slide_tracking(true);
+            } else {
+                printf("Swipe left - tracking already visible, ignoring\n");
+            }
+            break;
+        case LV_DIR_RIGHT: // Swipe right - idle screen
+            if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
+                printf("Swipe right - showing idle\n");
+                show_idle();
+            } else {
+                printf("Swipe right - idle already visible, ignoring\n");
+            }
+            break;
          default:
              break;
          }
@@ -1604,16 +1681,24 @@
      printf("Key pressed: %d (char: %c)\n", key, (char)key);
 
      switch (key) {
-     case 'i':
-     case 'I': // Idle screen
-         printf("Key I - showing idle\n");
-         show_idle();
-         break;
-     case 't':
-     case 'T': // Tracking screen
-         printf("Key T - showing tracking\n");
-         slide_tracking(true);
-         break;
+    case 'i':
+    case 'I': // Idle screen
+        if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
+            printf("Key I - showing idle\n");
+            show_idle();
+        } else {
+            printf("Key I - idle already visible, ignoring\n");
+        }
+        break;
+    case 't':
+    case 'T': // Tracking screen
+        if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
+            printf("Key T - showing tracking\n");
+            slide_tracking(true);
+        } else {
+            printf("Key T - tracking already visible, ignoring\n");
+        }
+        break;
      case 's':
      case 'S': // Settings
          printf("Key S - toggling settings\n");
