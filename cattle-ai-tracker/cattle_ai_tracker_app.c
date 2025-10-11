@@ -42,16 +42,16 @@
 
  #define DUMMY_TARGET_COUNT (sizeof(DUMMY_TARGETS) / sizeof(DUMMY_TARGETS[0]))
 
-/*********************
- *      DEFINES
- *********************/
-#define CIRCLE_RADIUS         (CATTLE_SCREEN_WIDTH / 2)
-#define CIRCLE_CENTER         (CIRCLE_RADIUS)
-#define SOS_HOLD_MS           3000
-#define SETTINGS_PANEL_HEIGHT (CATTLE_SCREEN_HEIGHT * 8 / 10) // 80% of screen height
+ /*********************
+  *      DEFINES
+  *********************/
+ #define CIRCLE_RADIUS         (CATTLE_SCREEN_WIDTH / 2)
+ #define CIRCLE_CENTER         (CIRCLE_RADIUS)
+ #define SOS_HOLD_MS           3000
+ #define SETTINGS_PANEL_HEIGHT (CATTLE_SCREEN_HEIGHT * 8 / 10) // 80% of screen height
 
-/* Feature flags */
-#define ENABLE_CLOSE_TRACKING 1  // Set to 1 to enable close tracking mode, 0 to disable
+ /* Feature flags */
+ #define ENABLE_CLOSE_TRACKING 1 // Set to 1 to enable close tracking mode, 0 to disable
 
  /**********************
   *      TYPEDEFS
@@ -148,21 +148,21 @@
      /* Idle screen bottom text */
      lv_obj_t *idle_bottom_text;
 
-#if ENABLE_CLOSE_TRACKING
-      /* Close-range navigation mode */
-      bool close_range_mode;
-      lv_obj_t *close_nav_container;
-      lv_obj_t *close_nav_ring_img;
-      lv_obj_t *close_nav_arrow_img;
-      lv_obj_t *close_nav_cow_icon_img;
-      lv_obj_t *close_nav_distance_text;
-      lv_obj_t *close_nav_compass_text;
-      lv_obj_t *found_circle;
-      lv_obj_t *found_cow_icon;
-      lv_obj_t *found_text;
-      lv_anim_t *close_nav_zoom_anim;
-      bool close_nav_zooming_out;
-#endif
+ #if ENABLE_CLOSE_TRACKING
+     /* Close-range navigation mode */
+     bool close_range_mode;
+     lv_obj_t *close_nav_container;
+     lv_obj_t *close_nav_ring_img;
+     lv_obj_t *close_nav_arrow_img;
+     lv_obj_t *close_nav_cow_icon_img;
+     lv_obj_t *close_nav_distance_text;
+     lv_obj_t *close_nav_compass_text;
+     lv_obj_t *found_circle;
+     lv_obj_t *found_cow_icon;
+     lv_obj_t *found_text;
+     lv_anim_t *close_nav_zoom_anim;
+     bool close_nav_zooming_out;
+ #endif
  } cattle_app_t;
 
  static cattle_app_t g;
@@ -199,16 +199,16 @@
  static void show_idle(void);
  static void __attribute__((unused)) show_tracking(void);
  static void slide_tracking(bool show);
-  static void show_sos_alert(void);
-  static void hide_sos_alert(void);
-#if ENABLE_CLOSE_TRACKING
-  static void show_close_range_mode(void);
-  static void hide_close_range_mode(void);
-  static void create_close_range_ui(void);
-  static void update_close_range_arrow(void);
-  static void on_close_nav_zoom_anim(void *var, int32_t value);
-  static void on_close_nav_zoom_ready(lv_anim_t *anim);
-#endif
+ static void show_sos_alert(void);
+ static void hide_sos_alert(void);
+ #if ENABLE_CLOSE_TRACKING
+ static void show_close_range_mode(void);
+ static void hide_close_range_mode(void);
+ static void create_close_range_ui(void);
+ static void update_close_range_arrow(void);
+ static void on_close_nav_zoom_anim(void *var, int32_t value);
+ static void on_close_nav_zoom_ready(lv_anim_t *anim);
+ #endif
 
  static void on_keyboard(lv_event_t *e);
  static void on_pressed(lv_event_t *e);
@@ -312,58 +312,62 @@
  static void clamp_input_coordinates(lv_point_t *point)
  {
      /* Clamp coordinates to 466x466 constraint */
-     if (point->x < 0) point->x = 0;
-     if (point->x >= CATTLE_SCREEN_WIDTH) point->x = CATTLE_SCREEN_WIDTH - 1;
-     if (point->y < 0) point->y = 0;
-     if (point->y >= CATTLE_SCREEN_HEIGHT) point->y = CATTLE_SCREEN_HEIGHT - 1;
+     if (point->x < 0)
+         point->x = 0;
+     if (point->x >= CATTLE_SCREEN_WIDTH)
+         point->x = CATTLE_SCREEN_WIDTH - 1;
+     if (point->y < 0)
+         point->y = 0;
+     if (point->y >= CATTLE_SCREEN_HEIGHT)
+         point->y = CATTLE_SCREEN_HEIGHT - 1;
  }
-static void create_root(void)
-{
-    g.screen = lv_obj_create(NULL);
-    lv_obj_set_size(g.screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_set_style_bg_color(g.screen, lv_color_hex(0x101214), 0);
-    lv_obj_set_style_bg_opa(g.screen, LV_OPA_COVER, 0);
+ static void create_root(void)
+ {
+     g.screen = lv_obj_create(NULL);
+     lv_obj_set_size(g.screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_color(g.screen, lv_color_hex(0x101214), 0);
+     lv_obj_set_style_bg_opa(g.screen, LV_OPA_COVER, 0);
 
-    /* Disable scrolling on main screen to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable scrolling on main screen to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLLABLE);
+     lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.screen, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-    /* Circular viewport centered - no border */
-    g.viewport = lv_obj_create(g.screen);
-    lv_obj_set_size(g.viewport, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_center(g.viewport);
-    lv_obj_set_style_radius(g.viewport, CIRCLE_RADIUS, 0);
-    lv_obj_set_style_clip_corner(g.viewport, true, 0);
-    lv_obj_set_style_border_width(g.viewport, 0, 0);
-    lv_obj_set_style_bg_color(g.viewport, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(g.viewport, LV_OPA_COVER, 0);
+     /* Circular viewport centered - no border */
+     g.viewport = lv_obj_create(g.screen);
+     lv_obj_set_size(g.viewport, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_center(g.viewport);
+     lv_obj_set_style_radius(g.viewport, CIRCLE_RADIUS, 0);
+     lv_obj_set_style_clip_corner(g.viewport, true, 0);
+     lv_obj_set_style_border_width(g.viewport, 0, 0);
+     lv_obj_set_style_bg_color(g.viewport, lv_color_black(), 0);
+     lv_obj_set_style_bg_opa(g.viewport, LV_OPA_COVER, 0);
 
-    /* Disable scrolling on viewport to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable scrolling on viewport to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLLABLE);
+     lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.viewport, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-    lv_screen_load(g.screen);
-}
+     lv_screen_load(g.screen);
+ }
 
-static void create_idle_screen(void)
-{
-    g.idle_screen = lv_obj_create(g.screen);
-    lv_obj_remove_style_all(g.idle_screen);
-    lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
+ static void create_idle_screen(void)
+ {
+     g.idle_screen = lv_obj_create(g.screen);
+     lv_obj_remove_style_all(g.idle_screen);
+     lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disable all scrolling flags to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable all scrolling flags to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
 
      /* Center label */
      lv_obj_t *label = lv_label_create(g.idle_screen);
@@ -373,38 +377,81 @@ static void create_idle_screen(void)
      lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
      lv_obj_center(label);
 
-     /* Bottom text */
-     g.idle_bottom_text = lv_label_create(g.idle_screen);
-     lv_label_set_text(g.idle_bottom_text, "ASR LLM Text Response....");
-     lv_obj_set_style_text_color(g.idle_bottom_text, lv_color_hex(0xAAAAAA), 0);
-     lv_obj_set_style_text_font(g.idle_bottom_text, &lv_font_montserrat_16, 0);
-     lv_obj_set_style_text_align(g.idle_bottom_text, LV_TEXT_ALIGN_CENTER, 0);
-     lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, -50);
+    /* Bottom text - manual line breaking, maximum 3 lines with ellipsis */
+    g.idle_bottom_text = lv_label_create(g.idle_screen);
+    lv_obj_set_style_text_color(g.idle_bottom_text, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_style_text_font(g.idle_bottom_text, &font_puhui_18_2, 0);
+    lv_obj_set_style_text_align(g.idle_bottom_text, LV_TEXT_ALIGN_CENTER, 0);
+
+    /* Remove padding to maximize text area */
+    lv_obj_set_style_pad_all(g.idle_bottom_text, 0, 0);
+
+    /* No automatic wrapping - we handle line breaks manually */
+    lv_label_set_long_mode(g.idle_bottom_text, LV_LABEL_LONG_CLIP);
+
+    /* Circular screen geometry calculation:
+     * Screen radius: 233px, positioned at bottom (~40px from edge)
+     * At y=-40: chord width ≈ 2*sqrt(233^2 - 193^2) ≈ 270px
+     * Font size 18px: ~13-14 Chinese chars per line
+     * 3 lines: ~40-42 characters total capacity
+     */
+    /* No fixed width needed - text is pre-formatted with manual line breaks */
+
+    /* Set line spacing for better readability */
+    lv_obj_set_style_text_line_space(g.idle_bottom_text, 2, 0);
+
+    /* Position at bottom, within circular boundary
+     * y=-20 places text very close to bottom edge
+     * With 3 lines (~60px total height), top line extends to y=-80
+     */
+    lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, -20);
+
+    /* Set initial text using update function to apply line breaking */
+    update_idle_bottom_text("你好，你知道我的牛在哪里吗？ 这个是长句子的断句测试，跨行换行功能，如果有太多行语音回复那就直接用...来替代。");
  }
 
-static void compass_build(lv_obj_t *parent)
-{
-    g.compass_container = lv_obj_create(parent);
-    lv_obj_remove_style_all(g.compass_container);
-    lv_obj_set_size(g.compass_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLLABLE);
+ static void compass_build(lv_obj_t *parent)
+ {
+     g.compass_container = lv_obj_create(parent);
+     lv_obj_remove_style_all(g.compass_container);
+     lv_obj_set_size(g.compass_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disable all scrolling flags to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable all scrolling flags to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-     /* Compass face ring image - replaces white ring and labels */
+     /* Compass face ring image - OPTIMIZED for performance */
      g.compass_face_ring_img = lv_img_create(g.compass_container);
      lv_img_set_src(g.compass_face_ring_img, &compass_face_ring);
      lv_obj_set_size(g.compass_face_ring_img, 466, 466); /* Set actual image size */
      lv_obj_center(g.compass_face_ring_img);
      lv_obj_clear_flag(g.compass_face_ring_img, LV_OBJ_FLAG_CLICKABLE);
      lv_obj_clear_flag(g.compass_face_ring_img, LV_OBJ_FLAG_SCROLLABLE);
+
+     /* Performance optimizations */
+     lv_obj_set_style_opa(g.compass_face_ring_img, LV_OPA_COVER, 0);                /* Ensure full opacity */
+     lv_obj_set_style_blend_mode(g.compass_face_ring_img, LV_BLEND_MODE_NORMAL, 0); /* Normal blending */
+     /* Note: antialiasing control not available in this LVGL version */
+
      /* Set pivot point to screen center for rotation */
      lv_obj_set_style_transform_pivot_x(g.compass_face_ring_img, CATTLE_SCREEN_WIDTH / 2, 0);
      lv_obj_set_style_transform_pivot_y(g.compass_face_ring_img, CATTLE_SCREEN_HEIGHT / 2, 0);
+
+     /* Cache the image for better performance */
+     /* Note: lv_img_cache_set_size not available in this LVGL version */
+
+     /* Pre-cache the compass face ring image */
+    //  lv_img_cache_invalidate_src(&compass_face_ring);
+    //  lv_img_cache_invalidate_src(&compass_face_ring); /* Force cache */
+
+     /* Set rendering optimizations */
+     lv_obj_set_style_radius(g.compass_face_ring_img, 0, 0);        /* No rounded corners */
+     lv_obj_set_style_border_width(g.compass_face_ring_img, 0, 0);  /* No border */
+     lv_obj_set_style_outline_width(g.compass_face_ring_img, 0, 0); /* No outline */
+     lv_obj_set_style_shadow_width(g.compass_face_ring_img, 0, 0);  /* No shadow */
 
      /* Create dynamic interval lines */
      create_interval_lines();
@@ -472,14 +519,14 @@ static void compass_build(lv_obj_t *parent)
      }
  }
 
-static void on_tracking_drag(lv_event_t *e)
-{
-    lv_indev_t *indev = lv_indev_get_act();
-    lv_point_t point;
-    lv_indev_get_point(indev, &point);
+ static void on_tracking_drag(lv_event_t *e)
+ {
+     lv_indev_t *indev = lv_indev_get_act();
+     lv_point_t point;
+     lv_indev_get_point(indev, &point);
 
-    /* Clamp input coordinates to 466x466 constraint */
-    clamp_input_coordinates(&point);
+     /* Clamp input coordinates to 466x466 constraint */
+     clamp_input_coordinates(&point);
 
      /* Get current screen position */
      lv_coord_t current_x = lv_obj_get_x(g.tracking_screen);
@@ -640,18 +687,18 @@ static void on_tracking_drag(lv_event_t *e)
      /* Update the distance scale with the animated value */
      g.distance_scale_meters = (int)value;
 
-#if ENABLE_CLOSE_TRACKING
-      /* Check for close-range mode transition */
-      bool should_be_close_range = (g.distance_scale_meters < 100);
-      if (should_be_close_range != g.close_range_mode) {
-          g.close_range_mode = should_be_close_range;
-          if (g.close_range_mode) {
-              show_close_range_mode();
-          } else {
-              hide_close_range_mode();
-          }
-      }
-#endif
+ #if ENABLE_CLOSE_TRACKING
+     /* Check for close-range mode transition */
+     bool should_be_close_range = (g.distance_scale_meters < 100);
+     if (should_be_close_range != g.close_range_mode) {
+         g.close_range_mode = should_be_close_range;
+         if (g.close_range_mode) {
+             show_close_range_mode();
+         } else {
+             hide_close_range_mode();
+         }
+     }
+ #endif
 
      /* Performance optimization: Only update UI elements that need it */
      static int32_t last_value = -1;
@@ -677,18 +724,18 @@ static void on_tracking_drag(lv_event_t *e)
 
  static void update_interval_lines(void)
  {
-    /* Calculate screen radius for maximum circle */
-    float max_radius =
-        (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 15;
-    float min_radius = 20; /* Minimum radius for visible circles */
+     /* Calculate screen radius for maximum circle */
+     float max_radius =
+         (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 15;
+     float min_radius = 20; /* Minimum radius for visible circles */
 
-    /* Calculate the map scale - same as used for target markers */
-    static float cached_screen_radius = 0;
-    static float cached_map_scale = 0;
-    static int cached_distance_scale = 0;
+     /* Calculate the map scale - same as used for target markers */
+     static float cached_screen_radius = 0;
+     static float cached_map_scale = 0;
+     static int cached_distance_scale = 0;
 
-    float screen_radius =
-        (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 60;
+     float screen_radius =
+         (CATTLE_SCREEN_WIDTH < CATTLE_SCREEN_HEIGHT ? CATTLE_SCREEN_WIDTH : CATTLE_SCREEN_HEIGHT) / 2 - 60;
      float map_scale;
 
      /* Cache map scale calculation to avoid redundant computation */
@@ -703,30 +750,32 @@ static void on_tracking_drag(lv_event_t *e)
      float dynamic_intervals[12];
      int interval_count = 0;
 
-     /* Optimized step size lookup table */
-     static const struct {
-         float max_distance;
-         float step_size;
-     } step_lookup[] = {
-         {100.0f, 20.0f},         /* 20m steps for small scales */
-         {500.0f, 50.0f},         /* 50m steps for medium scales */
-         {2000.0f, 200.0f},       /* 200m steps for larger scales */
-         {10000.0f, 1000.0f},     /* 1km steps for km scales */
-         {50000.0f, 5000.0f},     /* 5km steps for larger km scales */
-         {200000.0f, 20000.0f},   /* 20km steps for very large scales */
-         {999999999.0f, 50000.0f} /* 50km steps for huge scales */
-     };
+    /* Optimized step size lookup table */
+    static const struct {
+        float max_distance;
+        float step_size;
+    } step_lookup[] = {
+        {100.0f, 20.0f},         /* 20m steps for small scales */
+        {200.0f, 50.0f},         /* 50m steps at 200m scale (doubled tick lines) */
+        {500.0f, 100.0f},        /* 100m steps for medium scales (reduced from 50m) */
+        {1000.0f, 200.0f},       /* 200m steps at 1KM scale (reduced tick lines by half) */
+        {2000.0f, 100.0f},       /* 100m steps for larger scales */
+        {10000.0f, 1000.0f},     /* 1km steps for km scales */
+        {50000.0f, 5000.0f},     /* 5km steps for larger km scales */
+        {200000.0f, 20000.0f},   /* 20km steps for very large scales */
+        {999999999.0f, 50000.0f} /* 50km steps for huge scales */
+    };
 
-     float total_distance = g.distance_scale_meters;
-     float step_size = 50000.0f; /* Default fallback */
+    float total_distance = g.distance_scale_meters;
+    float step_size = 50000.0f; /* Default fallback */
 
-     /* Find appropriate step size using lookup table */
-     for (int i = 0; i < 7; i++) {
-         if (total_distance <= step_lookup[i].max_distance) {
-             step_size = step_lookup[i].step_size;
-             break;
-         }
-     }
+    /* Find appropriate step size using lookup table */
+    for (int i = 0; i < 9; i++) {
+        if (total_distance <= step_lookup[i].max_distance) {
+            step_size = step_lookup[i].step_size;
+            break;
+        }
+    }
 
      /* Generate evenly spaced intervals */
      for (float interval = step_size; interval <= total_distance; interval += step_size) {
@@ -740,32 +789,32 @@ static void on_tracking_drag(lv_event_t *e)
      int visible_count = 0;
      int selected_indices[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
-    /* Select intervals that fit within screen bounds */
-    for (int i = 0; i < interval_count && visible_count < 12; i++) {
-        float distance = dynamic_intervals[i];
-        float circle_radius = distance / map_scale;
+     /* Select intervals that fit within screen bounds */
+     for (int i = 0; i < interval_count && visible_count < 12; i++) {
+         float distance = dynamic_intervals[i];
+         float circle_radius = distance / map_scale;
 
-        /* Only select intervals that are within reasonable bounds */
-        if (circle_radius >= min_radius && circle_radius <= max_radius) {
-            selected_indices[visible_count] = i;
-            visible_count++;
-        }
-    }
+         /* Only select intervals that are within reasonable bounds */
+         if (circle_radius >= min_radius && circle_radius <= max_radius) {
+             selected_indices[visible_count] = i;
+             visible_count++;
+         }
+     }
 
-    /* Ensure we have at least 3 ticks if possible */
-    if (visible_count < 3) {
-        /* Try to find at least 3 intervals even if they're slightly outside bounds */
-        for (int i = 0; i < interval_count && visible_count < 3; i++) {
-            float distance = dynamic_intervals[i];
-            float circle_radius = distance / map_scale;
+     /* Ensure we have at least 3 ticks if possible */
+     if (visible_count < 3) {
+         /* Try to find at least 3 intervals even if they're slightly outside bounds */
+         for (int i = 0; i < interval_count && visible_count < 3; i++) {
+             float distance = dynamic_intervals[i];
+             float circle_radius = distance / map_scale;
 
-            /* Allow slightly smaller circles to ensure we have at least 3 */
-            if (circle_radius >= min_radius * 0.8f && circle_radius <= max_radius * 1.2f) {
-                selected_indices[visible_count] = i;
-                visible_count++;
-            }
-        }
-    }
+             /* Allow slightly smaller circles to ensure we have at least 3 */
+             if (circle_radius >= min_radius * 0.8f && circle_radius <= max_radius * 1.2f) {
+                 selected_indices[visible_count] = i;
+                 visible_count++;
+             }
+         }
+     }
 
      /* Performance optimization: Update interval lines without rotation */
      for (int i = 0; i < g.interval_lines_count; i++) {
@@ -789,16 +838,16 @@ static void on_tracking_drag(lv_event_t *e)
                  }
              }
 
-            if (should_show) {
+             if (should_show) {
 
-                int radius_int = (int)circle_radius;
-                int size = radius_int * 2;
-                int pos = CIRCLE_CENTER - radius_int;
+                 int radius_int = (int)circle_radius;
+                 int size = radius_int * 2;
+                 int pos = CIRCLE_CENTER - radius_int;
 
-                lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
-                lv_obj_set_size(g.interval_lines[i], size, size);
-                lv_obj_set_pos(g.interval_lines[i], pos, pos);
-                lv_obj_set_style_radius(g.interval_lines[i], radius_int, 0);
+                 lv_obj_clear_flag(g.interval_lines[i], LV_OBJ_FLAG_HIDDEN);
+                 lv_obj_set_size(g.interval_lines[i], size, size);
+                 lv_obj_set_pos(g.interval_lines[i], pos, pos);
+                 lv_obj_set_style_radius(g.interval_lines[i], radius_int, 0);
 
                  /* Performance: Only invalidate if actually changed */
                  static float last_radius[12] = {0};
@@ -953,21 +1002,21 @@ static void on_tracking_drag(lv_event_t *e)
      g.map_scale = g.distance_scale_meters / screen_radius;
  }
 
-  static void render_target_markers(void)
-  {
-#if ENABLE_CLOSE_TRACKING
-      /* Don't render markers in close-range mode */
-      if (g.close_range_mode) {
-          /* Clear existing markers */
-          for (int i = 0; i < MAX_TARGETS; i++) {
-              if (g.target_markers[i]) {
-                  lv_obj_del(g.target_markers[i]);
-                  g.target_markers[i] = NULL;
-              }
-          }
-          return;
-      }
-#endif
+ static void render_target_markers(void)
+ {
+ #if ENABLE_CLOSE_TRACKING
+     /* Don't render markers in close-range mode */
+     if (g.close_range_mode) {
+         /* Clear existing markers */
+         for (int i = 0; i < MAX_TARGETS; i++) {
+             if (g.target_markers[i]) {
+                 lv_obj_del(g.target_markers[i]);
+                 g.target_markers[i] = NULL;
+             }
+         }
+         return;
+     }
+ #endif
 
      /* Clear existing markers */
      for (int i = 0; i < MAX_TARGETS; i++) {
@@ -1091,14 +1140,14 @@ static void on_tracking_drag(lv_event_t *e)
      }
  }
 
-  static void update_target_positions(void)
-  {
-#if ENABLE_CLOSE_TRACKING
-      /* Don't update markers in close-range mode */
-      if (g.close_range_mode) {
-          return;
-      }
-#endif
+ static void update_target_positions(void)
+ {
+ #if ENABLE_CLOSE_TRACKING
+     /* Don't update markers in close-range mode */
+     if (g.close_range_mode) {
+         return;
+     }
+ #endif
 
      /* Only update positions of existing markers - don't recreate them */
      if (g.target_count == 0)
@@ -1184,14 +1233,14 @@ static void on_tracking_drag(lv_event_t *e)
      }
  }
 
-  static void update_target_positions_for_new_origin(void)
-  {
-#if ENABLE_CLOSE_TRACKING
-      /* Don't update markers in close-range mode */
-      if (g.close_range_mode) {
-          return;
-      }
-#endif
+ static void update_target_positions_for_new_origin(void)
+ {
+ #if ENABLE_CLOSE_TRACKING
+     /* Don't update markers in close-range mode */
+     if (g.close_range_mode) {
+         return;
+     }
+ #endif
 
      /* Recalculate all target positions based on new tracker origin */
      for (int i = 0; i < g.target_count; i++) {
@@ -1257,43 +1306,43 @@ static void on_tracking_drag(lv_event_t *e)
      mark_all_coordinates_dirty();
  }
 
-static void create_tracking_screen(void)
-{
-    g.tracking_screen = lv_obj_create(g.screen);
-    lv_obj_remove_style_all(g.tracking_screen);
-    lv_obj_set_size(g.tracking_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_set_style_bg_opa(g.tracking_screen, LV_OPA_TRANSP, 0);
-    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLLABLE);
+ static void create_tracking_screen(void)
+ {
+     g.tracking_screen = lv_obj_create(g.screen);
+     lv_obj_remove_style_all(g.tracking_screen);
+     lv_obj_set_size(g.tracking_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_opa(g.tracking_screen, LV_OPA_TRANSP, 0);
+     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disable all scrolling flags to enforce 466x466 constraint and prevent scrolling during swipe gestures */
-    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable all scrolling flags to enforce 466x466 constraint and prevent scrolling during swipe gestures */
+     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-    /* Add drag functionality to tracking screen */
-    lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_PRESSING, NULL);
-    lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_RELEASED, NULL);
+     /* Add drag functionality to tracking screen */
+     lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_PRESSING, NULL);
+     lv_obj_add_event_cb(g.tracking_screen, on_tracking_drag, LV_EVENT_RELEASED, NULL);
 
      compass_build(g.tracking_screen);
 
-    /* Create map container for GPS targets */
-    g.map_container = lv_obj_create(g.tracking_screen);
-    lv_obj_remove_style_all(g.map_container);
-    lv_obj_set_size(g.map_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_set_style_bg_opa(g.map_container, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(g.map_container, 0, 0);
-    lv_obj_set_style_pad_all(g.map_container, 0, 0);
-    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLLABLE);
+     /* Create map container for GPS targets */
+     g.map_container = lv_obj_create(g.tracking_screen);
+     lv_obj_remove_style_all(g.map_container);
+     lv_obj_set_size(g.map_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_opa(g.map_container, LV_OPA_TRANSP, 0);
+     lv_obj_set_style_border_width(g.map_container, 0, 0);
+     lv_obj_set_style_pad_all(g.map_container, 0, 0);
+     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_CLICKABLE);
+     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disable all scrolling flags to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable all scrolling flags to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-    lv_obj_center(g.map_container);
+     lv_obj_center(g.map_container);
 
      /* Initialize dummy GPS data from data structure */
      g.self_lat = DUMMY_SELF_LAT;
@@ -1370,23 +1419,23 @@ static void create_tracking_screen(void)
      /* Don't let backdrop capture keyboard events */
      lv_obj_clear_flag(g.settings_backdrop, LV_OBJ_FLAG_CLICKABLE);
 
-    g.settings_panel = lv_obj_create(g.screen);
-    lv_obj_set_size(g.settings_panel, CATTLE_SCREEN_WIDTH, SETTINGS_PANEL_HEIGHT);
-    lv_obj_align(g.settings_panel, LV_ALIGN_TOP_MID, 0, -SETTINGS_PANEL_HEIGHT);
-    lv_obj_set_style_radius(g.settings_panel, 0, 0);
-    lv_obj_set_style_bg_color(g.settings_panel, lv_color_hex(0x182028), 0);
-    lv_obj_set_style_bg_opa(g.settings_panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(g.settings_panel, 0, 0);
-    lv_obj_set_style_pad_all(g.settings_panel, 0, 0);
-    /* Don't let settings panel capture keyboard events */
-    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_CLICKABLE);
+     g.settings_panel = lv_obj_create(g.screen);
+     lv_obj_set_size(g.settings_panel, CATTLE_SCREEN_WIDTH, SETTINGS_PANEL_HEIGHT);
+     lv_obj_align(g.settings_panel, LV_ALIGN_TOP_MID, 0, -SETTINGS_PANEL_HEIGHT);
+     lv_obj_set_style_radius(g.settings_panel, 0, 0);
+     lv_obj_set_style_bg_color(g.settings_panel, lv_color_hex(0x182028), 0);
+     lv_obj_set_style_bg_opa(g.settings_panel, LV_OPA_COVER, 0);
+     lv_obj_set_style_border_width(g.settings_panel, 0, 0);
+     lv_obj_set_style_pad_all(g.settings_panel, 0, 0);
+     /* Don't let settings panel capture keyboard events */
+     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_CLICKABLE);
 
-    /* Disable scrolling on settings panel to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable scrolling on settings panel to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLLABLE);
+     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
 
      /* Title */
      lv_obj_t *title = lv_label_create(g.settings_panel);
@@ -1440,22 +1489,22 @@ static void create_tracking_screen(void)
      lv_obj_align(close_hint, LV_ALIGN_BOTTOM_MID, 0, -30);
  }
 
-static void create_sos_screen(void)
-{
-    g.sos_screen = lv_obj_create(g.screen);
-    lv_obj_remove_style_all(g.sos_screen);
-    lv_obj_set_size(g.sos_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_set_style_bg_color(g.sos_screen, lv_color_hex(0x2a1a1a), 0);
-    lv_obj_set_style_bg_opa(g.sos_screen, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLLABLE);
+ static void create_sos_screen(void)
+ {
+     g.sos_screen = lv_obj_create(g.screen);
+     lv_obj_remove_style_all(g.sos_screen);
+     lv_obj_set_size(g.sos_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_color(g.sos_screen, lv_color_hex(0x2a1a1a), 0);
+     lv_obj_set_style_bg_opa(g.sos_screen, LV_OPA_COVER, 0);
+     lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disable all scrolling flags to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable all scrolling flags to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.sos_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-    lv_obj_add_flag(g.sos_screen, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_add_flag(g.sos_screen, LV_OBJ_FLAG_HIDDEN);
 
      lv_obj_t *title = lv_label_create(g.sos_screen);
      lv_label_set_text(title, "SOS Active\n\nPress 'X' to cancel");
@@ -1574,14 +1623,14 @@ static void create_sos_screen(void)
      }
  }
 
-static void on_settings_drag(lv_event_t *e)
-{
-    lv_indev_t *indev = lv_indev_get_act();
-    lv_point_t point;
-    lv_indev_get_point(indev, &point);
+ static void on_settings_drag(lv_event_t *e)
+ {
+     lv_indev_t *indev = lv_indev_get_act();
+     lv_point_t point;
+     lv_indev_get_point(indev, &point);
 
-    /* Clamp input coordinates to 466x466 constraint */
-    clamp_input_coordinates(&point);
+     /* Clamp input coordinates to 466x466 constraint */
+     clamp_input_coordinates(&point);
 
      /* Get current panel position */
      lv_coord_t current_y = lv_obj_get_y(g.settings_panel);
@@ -1649,22 +1698,22 @@ static void on_settings_drag(lv_event_t *e)
                  slide_settings(true);
              }
              break;
-        case LV_DIR_LEFT: // Swipe left - tracking screen
-            if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
-                printf("Swipe left - showing tracking\n");
-                slide_tracking(true);
-            } else {
-                printf("Swipe left - tracking already visible, ignoring\n");
-            }
-            break;
-        case LV_DIR_RIGHT: // Swipe right - idle screen
-            if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
-                printf("Swipe right - showing idle\n");
-                show_idle();
-            } else {
-                printf("Swipe right - idle already visible, ignoring\n");
-            }
-            break;
+         case LV_DIR_LEFT: // Swipe left - tracking screen
+             if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
+                 printf("Swipe left - showing tracking\n");
+                 slide_tracking(true);
+             } else {
+                 printf("Swipe left - tracking already visible, ignoring\n");
+             }
+             break;
+         case LV_DIR_RIGHT: // Swipe right - idle screen
+             if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
+                 printf("Swipe right - showing idle\n");
+                 show_idle();
+             } else {
+                 printf("Swipe right - idle already visible, ignoring\n");
+             }
+             break;
          default:
              break;
          }
@@ -1683,24 +1732,24 @@ static void on_settings_drag(lv_event_t *e)
      printf("Key pressed: %d (char: %c)\n", key, (char)key);
 
      switch (key) {
-    case 'i':
-    case 'I': // Idle screen
-        if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
-            printf("Key I - showing idle\n");
-            show_idle();
-        } else {
-            printf("Key I - idle already visible, ignoring\n");
-        }
-        break;
-    case 't':
-    case 'T': // Tracking screen
-        if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
-            printf("Key T - showing tracking\n");
-            slide_tracking(true);
-        } else {
-            printf("Key T - tracking already visible, ignoring\n");
-        }
-        break;
+     case 'i':
+     case 'I': // Idle screen
+         if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
+             printf("Key I - showing idle\n");
+             show_idle();
+         } else {
+             printf("Key I - idle already visible, ignoring\n");
+         }
+         break;
+     case 't':
+     case 'T': // Tracking screen
+         if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
+             printf("Key T - showing tracking\n");
+             slide_tracking(true);
+         } else {
+             printf("Key T - tracking already visible, ignoring\n");
+         }
+         break;
      case 's':
      case 'S': // Settings
          printf("Key S - toggling settings\n");
@@ -1812,8 +1861,16 @@ static void on_settings_drag(lv_event_t *e)
 
      int16_t angle_int = (int16_t)(yaw_deg * 10);
 
-     /* Rotate compass face ring image */
-     lv_obj_set_style_transform_angle(g.compass_face_ring_img, angle_int, 0);
+     /* Rotate compass face ring image - OPTIMIZED */
+     /* Only update if angle change is significant (reduce unnecessary redraws) */
+     static int16_t last_angle = -1;
+     if (abs(angle_int - last_angle) >= 20) { /* Only update every 2 degrees for better performance */
+         lv_obj_set_style_transform_angle(g.compass_face_ring_img, angle_int, 0);
+         last_angle = angle_int;
+
+         /* Force a refresh only when needed */
+         lv_obj_invalidate(g.compass_face_ring_img);
+     }
      /* Pivot point is already set to screen center in compass_build() */
 
      /* Update rotation text display */
@@ -1822,12 +1879,12 @@ static void on_settings_drag(lv_event_t *e)
      /* Update target positions with new compass rotation */
      update_target_positions();
 
-#if ENABLE_CLOSE_TRACKING
-      /* Update close-range navigation if active */
-      if (g.close_range_mode) {
-          update_close_range_arrow();
-      }
-#endif
+ #if ENABLE_CLOSE_TRACKING
+     /* Update close-range navigation if active */
+     if (g.close_range_mode) {
+         update_close_range_arrow();
+     }
+ #endif
 
      /* Center overlay stays fixed - no rotation applied */
  }
@@ -1987,13 +2044,203 @@ static void on_settings_drag(lv_event_t *e)
      }
  }
 
- /* Function to update idle screen bottom text */
- void update_idle_bottom_text(const char *text)
- {
-     if (g.idle_bottom_text) {
-         lv_label_set_text(g.idle_bottom_text, text);
-     }
- }
+/* Helper function to count UTF-8 characters */
+static int utf8_char_count(const char *text)
+{
+    int count = 0;
+    const unsigned char *str = (const unsigned char *)text;
+
+    while (*str) {
+        /* Skip continuation bytes (10xxxxxx) */
+        if ((*str & 0xC0) != 0x80) {
+            count++;
+        }
+        str++;
+    }
+    return count;
+}
+
+/* Helper function to get byte position of Nth UTF-8 character */
+static int utf8_char_to_byte_pos(const char *text, int char_limit)
+{
+    int char_count = 0;
+    int byte_pos = 0;
+    const unsigned char *str = (const unsigned char *)text;
+
+    while (str[byte_pos] && char_count < char_limit) {
+        /* Count characters (not continuation bytes) */
+        if ((str[byte_pos] & 0xC0) != 0x80) {
+            char_count++;
+        }
+        byte_pos++;
+    }
+    return byte_pos;
+}
+
+/* Function to update idle screen bottom text with manual line breaking */
+void update_idle_bottom_text(const char *text)
+{
+    if (g.idle_bottom_text) {
+        static char display_text[300]; // Buffer for formatted text with line breaks
+        const int MAX_LINES = 3;         // Maximum number of lines
+        const lv_font_t *font = &font_puhui_18_2;
+
+        /* Different width for each line based on circular geometry
+         * Screen radius: 233px, center at (233, 233)
+         * Text positioned at bottom (y=-20), spanning ~60px height for 3 lines
+         * Row 1 (top, ~y=446-80=366 from top, 100 from bottom):
+         *   Distance from center: 233-100=133px, chord = 2*sqrt(233^2-133^2) ≈ 380px (use 280px safe)
+         * Row 2 (mid, ~y=446-60=386 from top, 80 from bottom):
+         *   Distance from center: 233-80=153px, chord = 2*sqrt(233^2-153^2) ≈ 350px (use 240px safe)
+         * Row 3 (bot, ~y=446-40=406 from top, 60 from bottom):
+         *   Distance from center: 233-60=173px, chord = 2*sqrt(233^2-173^2) ≈ 310px (use 180px safe)
+         */
+        const int LINE_WIDTHS[3] = {280, 240, 180};
+
+        if (text == NULL || text[0] == '\0') {
+            lv_label_set_text(g.idle_bottom_text, "");
+            return;
+        }
+
+        int line_count = 0;
+        int out_pos = 0;
+        int in_pos = 0;
+
+        /* Process text line by line */
+        while (text[in_pos] != '\0' && line_count < MAX_LINES) {
+            int max_width = LINE_WIDTHS[line_count];
+            int line_end_pos = in_pos;
+            int best_break_pos = in_pos;
+
+            /* Find the maximum amount of text that fits in current line */
+            while (text[line_end_pos] != '\0') {
+                /* Move to next character boundary (UTF-8 aware) */
+                int next_pos = line_end_pos;
+                if ((text[next_pos] & 0x80) == 0) {
+                    next_pos += 1; // ASCII
+                } else if ((text[next_pos] & 0xE0) == 0xC0) {
+                    next_pos += 2; // 2-byte UTF-8
+                } else if ((text[next_pos] & 0xF0) == 0xE0) {
+                    next_pos += 3; // 3-byte UTF-8 (Chinese)
+                } else if ((text[next_pos] & 0xF8) == 0xF0) {
+                    next_pos += 4; // 4-byte UTF-8
+                } else {
+                    next_pos += 1;
+                }
+
+                /* Check if this much text fits */
+                int len = next_pos - in_pos;
+                lv_coord_t width = lv_txt_get_width(&text[in_pos], len, font, 0);
+
+                if (width > max_width) {
+                    /* Too wide - use previous position */
+                    break;
+                }
+
+                /* This position fits - remember it */
+                best_break_pos = next_pos;
+                line_end_pos = next_pos;
+            }
+
+            /* Copy the line text */
+            int line_len = best_break_pos - in_pos;
+            if (line_len > 0 && out_pos + line_len < sizeof(display_text) - 10) {
+                memcpy(&display_text[out_pos], &text[in_pos], line_len);
+                out_pos += line_len;
+
+                /* Move to next position */
+                in_pos = best_break_pos;
+                line_count++;
+
+                /* Add newline if there's more text and we haven't reached max lines */
+                if (text[in_pos] != '\0' && line_count < MAX_LINES) {
+                    display_text[out_pos++] = '\n';
+                }
+            } else {
+                /* No progress made - force at least one character */
+                if (line_len == 0 && text[in_pos] != '\0') {
+                    /* Force copy at least one character to avoid infinite loop */
+                    int char_size = 1;
+                    if ((text[in_pos] & 0xE0) == 0xC0) char_size = 2;
+                    else if ((text[in_pos] & 0xF0) == 0xE0) char_size = 3;
+                    else if ((text[in_pos] & 0xF8) == 0xF0) char_size = 4;
+
+                    if (out_pos + char_size < sizeof(display_text) - 10) {
+                        memcpy(&display_text[out_pos], &text[in_pos], char_size);
+                        out_pos += char_size;
+                        in_pos += char_size;
+
+                        if (text[in_pos] != '\0' && line_count < MAX_LINES - 1) {
+                            display_text[out_pos++] = '\n';
+                        }
+                        line_count++;
+                    }
+                }
+                break;
+            }
+        }
+
+        /* Check if there's still text remaining after 3 lines */
+        if (text[in_pos] != '\0') {
+            /* Text exceeds 3 lines - need to add ellipsis to the last line */
+            /* Remove the last line break if it exists */
+            if (out_pos > 0 && display_text[out_pos - 1] == '\n') {
+                out_pos--;
+            }
+
+            /* Find the last line start */
+            int last_line_start = out_pos;
+            while (last_line_start > 0 && display_text[last_line_start - 1] != '\n') {
+                last_line_start--;
+            }
+
+            /* Calculate how much space we have for ellipsis */
+            int last_line_len = out_pos - last_line_start;
+            int max_width = LINE_WIDTHS[line_count - 1]; // Width of last line we wrote
+
+            /* Find how much of the last line fits with "..." */
+            lv_coord_t ellipsis_width = lv_txt_get_width("...", 3, font, 0);
+
+            while (last_line_len > 0) {
+                lv_coord_t line_width = lv_txt_get_width(&display_text[last_line_start], last_line_len, font, 0);
+
+                if (line_width + ellipsis_width <= max_width) {
+                    break;
+                }
+
+                /* Go back one character */
+                last_line_len--;
+                while (last_line_len > 0 && (display_text[last_line_start + last_line_len] & 0xC0) == 0x80) {
+                    last_line_len--; // Skip UTF-8 continuation bytes
+                }
+            }
+
+            /* Truncate and add ellipsis */
+            out_pos = last_line_start + last_line_len;
+            if (out_pos + 3 < sizeof(display_text) - 1) {
+                memcpy(&display_text[out_pos], "...", 3);
+                out_pos += 3;
+            }
+        }
+
+        display_text[out_pos] = '\0';
+        lv_label_set_text(g.idle_bottom_text, display_text);
+
+        /* Adjust vertical position based on number of lines
+         * More lines = lower position (closer to bottom)
+         * Fewer lines = higher position (to stay within circular boundary)
+         */
+        int y_offset;
+        if (line_count == 1) {
+            y_offset = -50;  /* Single line - position higher */
+        } else if (line_count == 2) {
+            y_offset = -35;  /* Two lines - middle position */
+        } else {
+            y_offset = -20;  /* Three lines - near bottom */
+        }
+        lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, y_offset);
+    }
+}
 
  /* Public GPS API Functions */
  void gps_add_target(float lat, float lon, uint32_t color)
@@ -2065,242 +2312,242 @@ static void on_settings_drag(lv_event_t *e)
      return &DUMMY_TARGETS[index];
  }
 
-#if ENABLE_CLOSE_TRACKING
-  /**********************
-   * CLOSE-RANGE NAVIGATION MODE
-   **********************/
+ #if ENABLE_CLOSE_TRACKING
+ /**********************
+  * CLOSE-RANGE NAVIGATION MODE
+  **********************/
 
-  static void create_close_range_ui(void)
-  {
-      /* Create close-range navigation container */
-      g.close_nav_container = lv_obj_create(g.tracking_screen);
-      lv_obj_set_size(g.close_nav_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-      lv_obj_set_style_bg_opa(g.close_nav_container, LV_OPA_TRANSP, 0);
-      lv_obj_set_style_border_width(g.close_nav_container, 0, 0); /* Remove border */
-      lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_SCROLLABLE);
+ static void create_close_range_ui(void)
+ {
+     /* Create close-range navigation container */
+     g.close_nav_container = lv_obj_create(g.tracking_screen);
+     lv_obj_set_size(g.close_nav_container, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_opa(g.close_nav_container, LV_OPA_TRANSP, 0);
+     lv_obj_set_style_border_width(g.close_nav_container, 0, 0); /* Remove border */
+     lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_CLICKABLE);
+     lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_SCROLLABLE);
 
-      /* Set transform pivot to center for proper scaling */
-      lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
-      lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
+     /* Set transform pivot to center for proper scaling */
+     lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
+     lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
 
-      lv_obj_center(g.close_nav_container);
-      lv_obj_add_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN); /* Initially hidden */
+     lv_obj_center(g.close_nav_container);
+     lv_obj_add_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN); /* Initially hidden */
 
-      /* Create black circle background */
-      lv_obj_t *black_circle = lv_obj_create(g.close_nav_container);
-      lv_obj_set_size(black_circle, 466, 466);
-      lv_obj_set_style_bg_color(black_circle, lv_color_black(), 0);
-      lv_obj_set_style_radius(black_circle, 233, 0);                    /* 466/2 = 233 for perfect circle */
-      lv_obj_set_style_border_width(black_circle, 0, 0);                /* Remove border */
-      lv_obj_set_style_border_color(black_circle, lv_color_black(), 0); /* Set border color to black */
-      lv_obj_center(black_circle);
+     /* Create black circle background */
+     lv_obj_t *black_circle = lv_obj_create(g.close_nav_container);
+     lv_obj_set_size(black_circle, 466, 466);
+     lv_obj_set_style_bg_color(black_circle, lv_color_black(), 0);
+     lv_obj_set_style_radius(black_circle, 233, 0);                    /* 466/2 = 233 for perfect circle */
+     lv_obj_set_style_border_width(black_circle, 0, 0);                /* Remove border */
+     lv_obj_set_style_border_color(black_circle, lv_color_black(), 0); /* Set border color to black */
+     lv_obj_center(black_circle);
 
-      /* Create the navigation ring */
-      g.close_nav_ring_img = lv_img_create(g.close_nav_container);
-      lv_img_set_src(g.close_nav_ring_img, &closing_nav_ring);
-      lv_obj_center(g.close_nav_ring_img);
+     /* Create the navigation ring */
+     g.close_nav_ring_img = lv_img_create(g.close_nav_container);
+     lv_img_set_src(g.close_nav_ring_img, &closing_nav_ring);
+     lv_obj_center(g.close_nav_ring_img);
 
-      /* Create the navigation arrow */
-      g.close_nav_arrow_img = lv_img_create(g.close_nav_container);
-      lv_img_set_src(g.close_nav_arrow_img, &closing_nav_arrow);
-      lv_obj_center(g.close_nav_arrow_img);
+     /* Create the navigation arrow */
+     g.close_nav_arrow_img = lv_img_create(g.close_nav_container);
+     lv_img_set_src(g.close_nav_arrow_img, &closing_nav_arrow);
+     lv_obj_center(g.close_nav_arrow_img);
 
-      /* Set transform pivot to screen center for proper rotation */
-      lv_obj_set_style_transform_pivot_x(g.close_nav_arrow_img, CATTLE_SCREEN_WIDTH / 2, 0);
-      lv_obj_set_style_transform_pivot_y(g.close_nav_arrow_img, CATTLE_SCREEN_HEIGHT / 2, 0);
+     /* Set transform pivot to screen center for proper rotation */
+     lv_obj_set_style_transform_pivot_x(g.close_nav_arrow_img, CATTLE_SCREEN_WIDTH / 2, 0);
+     lv_obj_set_style_transform_pivot_y(g.close_nav_arrow_img, CATTLE_SCREEN_HEIGHT / 2, 0);
 
-      /* Create distance text */
-      g.close_nav_distance_text = lv_label_create(g.close_nav_container);
-      lv_obj_set_style_text_color(g.close_nav_distance_text, lv_color_white(), 0);
-      lv_obj_set_style_text_font(g.close_nav_distance_text, &lv_font_montserrat_24, 0);
-      lv_obj_align(g.close_nav_distance_text, LV_ALIGN_TOP_MID, 0, 20);
+     /* Create distance text */
+     g.close_nav_distance_text = lv_label_create(g.close_nav_container);
+     lv_obj_set_style_text_color(g.close_nav_distance_text, lv_color_white(), 0);
+     lv_obj_set_style_text_font(g.close_nav_distance_text, &lv_font_montserrat_24, 0);
+     lv_obj_align(g.close_nav_distance_text, LV_ALIGN_TOP_MID, 0, 20);
 
-      /* Create compass text */
-      g.close_nav_compass_text = lv_label_create(g.close_nav_container);
-      lv_obj_set_style_text_color(g.close_nav_compass_text, lv_color_white(), 0);
-      lv_obj_set_style_text_font(g.close_nav_compass_text, &lv_font_montserrat_16, 0);
-      lv_obj_align(g.close_nav_compass_text, LV_ALIGN_BOTTOM_MID, 0, -20);
+     /* Create compass text */
+     g.close_nav_compass_text = lv_label_create(g.close_nav_container);
+     lv_obj_set_style_text_color(g.close_nav_compass_text, lv_color_white(), 0);
+     lv_obj_set_style_text_font(g.close_nav_compass_text, &lv_font_montserrat_16, 0);
+     lv_obj_align(g.close_nav_compass_text, LV_ALIGN_BOTTOM_MID, 0, -20);
 
-      /* Create found state elements (initially hidden) */
-      g.found_circle = lv_obj_create(g.close_nav_container);
-      lv_obj_set_size(g.found_circle, 200, 200);
-      lv_obj_set_style_bg_color(g.found_circle, lv_color_hex(0x00FF00), 0);
-      lv_obj_set_style_radius(g.found_circle, 100, 0);
-      lv_obj_center(g.found_circle);
-      lv_obj_add_flag(g.found_circle, LV_OBJ_FLAG_HIDDEN);
+     /* Create found state elements (initially hidden) */
+     g.found_circle = lv_obj_create(g.close_nav_container);
+     lv_obj_set_size(g.found_circle, 200, 200);
+     lv_obj_set_style_bg_color(g.found_circle, lv_color_hex(0x00FF00), 0);
+     lv_obj_set_style_radius(g.found_circle, 100, 0);
+     lv_obj_center(g.found_circle);
+     lv_obj_add_flag(g.found_circle, LV_OBJ_FLAG_HIDDEN);
 
-      g.found_text = lv_label_create(g.found_circle);
-      lv_label_set_text(g.found_text, "HERE");
-      lv_obj_set_style_text_color(g.found_text, lv_color_white(), 0);
-      lv_obj_set_style_text_font(g.found_text, &lv_font_montserrat_20, 0);
-      lv_obj_align(g.found_text, LV_ALIGN_TOP_MID, 0, 20);
+     g.found_text = lv_label_create(g.found_circle);
+     lv_label_set_text(g.found_text, "HERE");
+     lv_obj_set_style_text_color(g.found_text, lv_color_white(), 0);
+     lv_obj_set_style_text_font(g.found_text, &lv_font_montserrat_20, 0);
+     lv_obj_align(g.found_text, LV_ALIGN_TOP_MID, 0, 20);
 
-      g.found_cow_icon = lv_img_create(g.found_circle);
-      lv_img_set_src(g.found_cow_icon, &closing_nav_cow_icon);
-      lv_obj_center(g.found_cow_icon);
-  }
+     g.found_cow_icon = lv_img_create(g.found_circle);
+     lv_img_set_src(g.found_cow_icon, &closing_nav_cow_icon);
+     lv_obj_center(g.found_cow_icon);
+ }
 
-  static void show_close_range_mode(void)
-  {
-      if (!g.close_nav_container) {
-          create_close_range_ui();
-      }
+ static void show_close_range_mode(void)
+ {
+     if (!g.close_nav_container) {
+         create_close_range_ui();
+     }
 
-      /* Clear all dummy targets when entering close-range mode */
-      clear_all_targets();
+     /* Clear all dummy targets when entering close-range mode */
+     clear_all_targets();
 
-      /* Set transform pivot to center of screen for proper scaling */
-      lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
-      lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
+     /* Set transform pivot to center of screen for proper scaling */
+     lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
+     lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
 
-      /* Start with small scale for zoom-in animation */
-      lv_obj_set_style_transform_zoom(g.close_nav_container, 128, 0); /* 128 = 0.5x scale (small) */
-      lv_obj_center(g.close_nav_container);
+     /* Start with small scale for zoom-in animation */
+     lv_obj_set_style_transform_zoom(g.close_nav_container, 128, 0); /* 128 = 0.5x scale (small) */
+     lv_obj_center(g.close_nav_container);
 
-      /* Show close-range navigation */
-      lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);
+     /* Show close-range navigation */
+     lv_obj_clear_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);
 
-      /* Hide compass elements */
-      lv_obj_add_flag(g.compass_container, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(g.distance_img, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(g.distance_text, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(g.rotation_bg, LV_OBJ_FLAG_HIDDEN);
+     /* Hide compass elements */
+     lv_obj_add_flag(g.compass_container, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_add_flag(g.distance_img, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_add_flag(g.distance_text, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_add_flag(g.rotation_bg, LV_OBJ_FLAG_HIDDEN);
 
-      /* Start zoom-in animation */
-      if (g.close_nav_zoom_anim) {
-          lv_anim_del(g.close_nav_zoom_anim, NULL);
-      }
-      g.close_nav_zooming_out = false; /* This is a zoom-in animation */
-      static lv_anim_t zoom_anim;
-      g.close_nav_zoom_anim = &zoom_anim;
-      lv_anim_init(g.close_nav_zoom_anim);
-      lv_anim_set_var(g.close_nav_zoom_anim, g.close_nav_container);
-      lv_anim_set_values(g.close_nav_zoom_anim, 128, 256); /* From 0.5x to 1.0x scale */
-      lv_anim_set_time(g.close_nav_zoom_anim, 250);        /* 250ms animation - faster */
-      lv_anim_set_exec_cb(g.close_nav_zoom_anim, on_close_nav_zoom_anim);
-      lv_anim_set_ready_cb(g.close_nav_zoom_anim, on_close_nav_zoom_ready);
-      lv_anim_set_path_cb(g.close_nav_zoom_anim, lv_anim_path_ease_out);
-      lv_anim_start(g.close_nav_zoom_anim);
+     /* Start zoom-in animation */
+     if (g.close_nav_zoom_anim) {
+         lv_anim_del(g.close_nav_zoom_anim, NULL);
+     }
+     g.close_nav_zooming_out = false; /* This is a zoom-in animation */
+     static lv_anim_t zoom_anim;
+     g.close_nav_zoom_anim = &zoom_anim;
+     lv_anim_init(g.close_nav_zoom_anim);
+     lv_anim_set_var(g.close_nav_zoom_anim, g.close_nav_container);
+     lv_anim_set_values(g.close_nav_zoom_anim, 128, 256); /* From 0.5x to 1.0x scale */
+     lv_anim_set_time(g.close_nav_zoom_anim, 250);        /* 250ms animation - faster */
+     lv_anim_set_exec_cb(g.close_nav_zoom_anim, on_close_nav_zoom_anim);
+     lv_anim_set_ready_cb(g.close_nav_zoom_anim, on_close_nav_zoom_ready);
+     lv_anim_set_path_cb(g.close_nav_zoom_anim, lv_anim_path_ease_out);
+     lv_anim_start(g.close_nav_zoom_anim);
 
-      /* Update close-range UI */
-      update_close_range_arrow();
-  }
+     /* Update close-range UI */
+     update_close_range_arrow();
+ }
 
-  static void hide_close_range_mode(void)
-  {
-      if (g.close_nav_container) {
-          /* Ensure transform pivot is set to center for proper scaling */
-          lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
-          lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
+ static void hide_close_range_mode(void)
+ {
+     if (g.close_nav_container) {
+         /* Ensure transform pivot is set to center for proper scaling */
+         lv_obj_set_style_transform_pivot_x(g.close_nav_container, CATTLE_SCREEN_WIDTH / 2, 0);
+         lv_obj_set_style_transform_pivot_y(g.close_nav_container, CATTLE_SCREEN_HEIGHT / 2, 0);
 
-          /* Start zoom-out animation */
-          if (g.close_nav_zoom_anim) {
-              lv_anim_del(g.close_nav_zoom_anim, NULL);
-          }
-          g.close_nav_zooming_out = true; /* This is a zoom-out animation */
-          static lv_anim_t zoom_out_anim;
-          g.close_nav_zoom_anim = &zoom_out_anim;
-          lv_anim_init(g.close_nav_zoom_anim);
-          lv_anim_set_var(g.close_nav_zoom_anim, g.close_nav_container);
-          lv_anim_set_values(g.close_nav_zoom_anim, 256, 128); /* From 1.0x to 0.5x scale */
-          lv_anim_set_time(g.close_nav_zoom_anim, 250);        /* 100ms animation - half the time */
-          lv_anim_set_exec_cb(g.close_nav_zoom_anim, on_close_nav_zoom_anim);
-          lv_anim_set_ready_cb(g.close_nav_zoom_anim, on_close_nav_zoom_ready);
-          lv_anim_set_path_cb(g.close_nav_zoom_anim, lv_anim_path_ease_in);
-          lv_anim_start(g.close_nav_zoom_anim);
+         /* Start zoom-out animation */
+         if (g.close_nav_zoom_anim) {
+             lv_anim_del(g.close_nav_zoom_anim, NULL);
+         }
+         g.close_nav_zooming_out = true; /* This is a zoom-out animation */
+         static lv_anim_t zoom_out_anim;
+         g.close_nav_zoom_anim = &zoom_out_anim;
+         lv_anim_init(g.close_nav_zoom_anim);
+         lv_anim_set_var(g.close_nav_zoom_anim, g.close_nav_container);
+         lv_anim_set_values(g.close_nav_zoom_anim, 256, 128); /* From 1.0x to 0.5x scale */
+         lv_anim_set_time(g.close_nav_zoom_anim, 250);        /* 100ms animation - half the time */
+         lv_anim_set_exec_cb(g.close_nav_zoom_anim, on_close_nav_zoom_anim);
+         lv_anim_set_ready_cb(g.close_nav_zoom_anim, on_close_nav_zoom_ready);
+         lv_anim_set_path_cb(g.close_nav_zoom_anim, lv_anim_path_ease_in);
+         lv_anim_start(g.close_nav_zoom_anim);
 
-          /* Don't hide immediately - let the animation complete first */
-          /* The hiding will be handled in the animation ready callback */
-      }
+         /* Don't hide immediately - let the animation complete first */
+         /* The hiding will be handled in the animation ready callback */
+     }
 
-      /* Restore dummy targets when exiting close-range mode */
-      for (int i = 0; i < (int)DUMMY_TARGET_COUNT; i++) {
-          add_target_coord(DUMMY_TARGETS[i].lat, DUMMY_TARGETS[i].lon, DUMMY_TARGETS[i].color);
-      }
-      update_map_scale();
-      render_target_markers();
+     /* Restore dummy targets when exiting close-range mode */
+     for (int i = 0; i < (int)DUMMY_TARGET_COUNT; i++) {
+         add_target_coord(DUMMY_TARGETS[i].lat, DUMMY_TARGETS[i].lon, DUMMY_TARGETS[i].color);
+     }
+     update_map_scale();
+     render_target_markers();
 
-      /* Show compass elements */
-      lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_clear_flag(g.distance_img, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_clear_flag(g.distance_text, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_clear_flag(g.rotation_bg, LV_OBJ_FLAG_HIDDEN);
-  }
+     /* Show compass elements */
+     lv_obj_clear_flag(g.compass_container, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_clear_flag(g.distance_img, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_clear_flag(g.distance_text, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_clear_flag(g.rotation_bg, LV_OBJ_FLAG_HIDDEN);
+ }
 
-  static void update_close_range_arrow(void)
-  {
-      if (!g.close_nav_arrow_img || !g.close_range_mode)
-          return;
+ static void update_close_range_arrow(void)
+ {
+     if (!g.close_nav_arrow_img || !g.close_range_mode)
+         return;
 
-      /* Use main compass angle for rotation */
-      float compass_angle = g.yaw_deg;
+     /* Use main compass angle for rotation */
+     float compass_angle = g.yaw_deg;
 
-      /* Use a fixed distance for close-range mode */
-      float distance = 50.0f; /* Fixed 50m distance for close-range display */
+     /* Use a fixed distance for close-range mode */
+     float distance = 50.0f; /* Fixed 50m distance for close-range display */
 
-      /* Update distance text */
-      char distance_str[32];
-      snprintf(distance_str, sizeof(distance_str), "Distance: %.0fM", distance);
-      lv_label_set_text(g.close_nav_distance_text, distance_str);
+     /* Update distance text */
+     char distance_str[32];
+     snprintf(distance_str, sizeof(distance_str), "Distance: %.0fM", distance);
+     lv_label_set_text(g.close_nav_distance_text, distance_str);
 
-      /* Update compass text */
-      char compass_str[32];
-      int degrees = (int)roundf(compass_angle);
-      const char *direction;
-      if (degrees >= 337.5f || degrees < 22.5f) {
-          direction = "N";
-      } else if (degrees >= 22.5f && degrees < 67.5f) {
-          direction = "NE";
-      } else if (degrees >= 67.5f && degrees < 112.5f) {
-          direction = "E";
-      } else if (degrees >= 112.5f && degrees < 157.5f) {
-          direction = "SE";
-      } else if (degrees >= 157.5f && degrees < 202.5f) {
-          direction = "S";
-      } else if (degrees >= 202.5f && degrees < 247.5f) {
-          direction = "SW";
-      } else if (degrees >= 247.5f && degrees < 292.5f) {
-          direction = "W";
-      } else {
-          direction = "NW";
-      }
-      snprintf(compass_str, sizeof(compass_str), "%s-%d°", direction, degrees);
-      lv_label_set_text(g.close_nav_compass_text, compass_str);
+     /* Update compass text */
+     char compass_str[32];
+     int degrees = (int)roundf(compass_angle);
+     const char *direction;
+     if (degrees >= 337.5f || degrees < 22.5f) {
+         direction = "N";
+     } else if (degrees >= 22.5f && degrees < 67.5f) {
+         direction = "NE";
+     } else if (degrees >= 67.5f && degrees < 112.5f) {
+         direction = "E";
+     } else if (degrees >= 112.5f && degrees < 157.5f) {
+         direction = "SE";
+     } else if (degrees >= 157.5f && degrees < 202.5f) {
+         direction = "S";
+     } else if (degrees >= 202.5f && degrees < 247.5f) {
+         direction = "SW";
+     } else if (degrees >= 247.5f && degrees < 292.5f) {
+         direction = "W";
+     } else {
+         direction = "NW";
+     }
+     snprintf(compass_str, sizeof(compass_str), "%s-%d°", direction, degrees);
+     lv_label_set_text(g.close_nav_compass_text, compass_str);
 
-      /* Set pivot to center of the arrow image for proper rotation */
-      lv_coord_t arrow_w = lv_obj_get_width(g.close_nav_arrow_img);
-      lv_coord_t arrow_h = lv_obj_get_height(g.close_nav_arrow_img);
-      lv_obj_set_style_transform_pivot_x(g.close_nav_arrow_img, arrow_w / 2, 0);
-      lv_obj_set_style_transform_pivot_y(g.close_nav_arrow_img, arrow_h / 2, 0);
+     /* Set pivot to center of the arrow image for proper rotation */
+     lv_coord_t arrow_w = lv_obj_get_width(g.close_nav_arrow_img);
+     lv_coord_t arrow_h = lv_obj_get_height(g.close_nav_arrow_img);
+     lv_obj_set_style_transform_pivot_x(g.close_nav_arrow_img, arrow_w / 2, 0);
+     lv_obj_set_style_transform_pivot_y(g.close_nav_arrow_img, arrow_h / 2, 0);
 
-      /* Align the arrow image center to the screen center */
-      lv_obj_align(g.close_nav_arrow_img, LV_ALIGN_CENTER, 0, 0);
+     /* Align the arrow image center to the screen center */
+     lv_obj_align(g.close_nav_arrow_img, LV_ALIGN_CENTER, 0, 0);
 
-      /* Rotate only the navigation arrow based on compass angle */
-      lv_obj_set_style_transform_angle(g.close_nav_arrow_img, compass_angle * 10, 0);
+     /* Rotate only the navigation arrow based on compass angle */
+     lv_obj_set_style_transform_angle(g.close_nav_arrow_img, compass_angle * 10, 0);
 
-      /* Dots removed for clean close-range navigation */
-  }
+     /* Dots removed for clean close-range navigation */
+ }
 
-  static void on_close_nav_zoom_anim(void *var, int32_t value)
-  {
-      lv_obj_t *container = (lv_obj_t *)var;
-      lv_obj_set_style_transform_zoom(container, value, 0);
-  }
+ static void on_close_nav_zoom_anim(void *var, int32_t value)
+ {
+     lv_obj_t *container = (lv_obj_t *)var;
+     lv_obj_set_style_transform_zoom(container, value, 0);
+ }
 
-  static void on_close_nav_zoom_ready(lv_anim_t *anim)
-  {
-      (void)anim;
-      /* Animation complete - check if this was a zoom-out animation */
-      if (g.close_nav_zooming_out) {
-          /* This is a zoom-out animation - hide the container */
-          if (g.close_nav_container) {
-              lv_obj_add_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);
-          }
-      } else {
-          /* This is a zoom-in animation - ensure final scale is set */
-          lv_obj_set_style_transform_zoom(g.close_nav_container, 256, 0); /* 1.0x scale */
-      }
-  }
-#endif
+ static void on_close_nav_zoom_ready(lv_anim_t *anim)
+ {
+     (void)anim;
+     /* Animation complete - check if this was a zoom-out animation */
+     if (g.close_nav_zooming_out) {
+         /* This is a zoom-out animation - hide the container */
+         if (g.close_nav_container) {
+             lv_obj_add_flag(g.close_nav_container, LV_OBJ_FLAG_HIDDEN);
+         }
+     } else {
+         /* This is a zoom-in animation - ensure final scale is set */
+         lv_obj_set_style_transform_zoom(g.close_nav_container, 256, 0); /* 1.0x scale */
+     }
+ }
+ #endif

@@ -91,6 +91,20 @@ else()
         ${PROJECT_SOURCE_DIR}/main/src/main.c
         ${PROJECT_SOURCE_DIR}/main/src/mouse_cursor_icon.c
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/cattle_ai_tracker_app.c
+        # FontAwesome fonts
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_awesome_14_1.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_awesome_16_4.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_awesome_20_4.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_awesome_30_1.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_awesome_30_4.c
+        # PuHui fonts
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_14_1.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_16_2.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_16_4.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_18_2.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_20_2.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_20_4.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_30_4.c
     )
 endif()
 
