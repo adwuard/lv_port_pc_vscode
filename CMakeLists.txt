@@ -105,6 +105,7 @@ else()
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_20_2.c
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_20_4.c
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_30_4.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/montserrat_time_82_extra_bold.c
     )
 endif()
 

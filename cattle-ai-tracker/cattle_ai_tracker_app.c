@@ -48,7 +48,7 @@
  #define CIRCLE_RADIUS         (CATTLE_SCREEN_WIDTH / 2)
  #define CIRCLE_CENTER         (CIRCLE_RADIUS)
  #define SOS_HOLD_MS           3000
- #define SETTINGS_PANEL_HEIGHT (CATTLE_SCREEN_HEIGHT * 8 / 10) // 80% of screen height
+ #define SETTINGS_PANEL_HEIGHT CATTLE_SCREEN_HEIGHT // Full screen height
 
  /* Feature flags */
  #define ENABLE_CLOSE_TRACKING 1 // Set to 1 to enable close tracking mode, 0 to disable
@@ -148,7 +148,28 @@
      /* Idle screen bottom text */
      lv_obj_t *idle_bottom_text;
 
- #if ENABLE_CLOSE_TRACKING
+    /* Typewriter animation state */
+    char *typewriter_full_text;      /* Full text to display */
+    int typewriter_char_index;       /* Current character index being displayed */
+    int typewriter_window_start;     /* Start position for sliding window */
+    lv_timer_t *typewriter_timer;    /* Timer for animation */
+    bool typewriter_active;          /* Animation active flag */
+
+    /* Eye animation state */
+    lv_obj_t *left_eye;              /* Left eye container */
+    lv_obj_t *right_eye;             /* Right eye container */
+    lv_obj_t *left_pupil;            /* Left eye white part */
+    lv_obj_t *right_pupil;           /* Right eye white part */
+    lv_timer_t *eye_blink_timer;     /* Blink animation timer */
+    lv_timer_t *eye_look_timer;      /* Eye movement timer */
+    int eye_state;                   /* 0=idle, 1=blinking, 2=happy */
+    int blink_phase;                 /* Blink animation phase */
+    int pupil_x_offset;              /* Pupil horizontal offset (-10 to 10) */
+    int pupil_y_offset;              /* Pupil vertical offset (-10 to 10) */
+    int target_pupil_x;              /* Target pupil X position */
+    int target_pupil_y;              /* Target pupil Y position */
+
+#if ENABLE_CLOSE_TRACKING
      /* Close-range navigation mode */
      bool close_range_mode;
      lv_obj_t *close_nav_container;
@@ -177,6 +198,15 @@
  static void animate_distance_scale(int target_scale);
  static void on_distance_anim_value(void *var, int32_t value);
  static void on_distance_anim_ready(lv_anim_t *anim);
+static void typewriter_timer_cb(lv_timer_t *timer);
+static void update_idle_bottom_text_static(const char *text);
+static int utf8_next_char_size(const char *text, int pos);
+static void create_eyes(void);
+static void eye_blink_timer_cb(lv_timer_t *timer);
+static void eye_look_timer_cb(lv_timer_t *timer);
+static void set_eye_state(int state);
+static void update_eye_animation(void);
+static void update_pupil_position(void);
  static void update_interval_lines(void);
  static void create_interval_lines(void);
  static float calculate_distance(float lat1, float lon1, float lat2, float lon2);
@@ -355,33 +385,305 @@
      lv_screen_load(g.screen);
  }
 
- static void create_idle_screen(void)
- {
-     g.idle_screen = lv_obj_create(g.screen);
-     lv_obj_remove_style_all(g.idle_screen);
-     lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-     lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
-     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
+/* Create eye animation */
+static void create_eyes(void)
+{
+    const int EYE_SPACING = 140;    /* Distance between eyes */
+    const int EYE_WIDTH = 140;      /* Eye container width (larger to prevent cropping) */
+    const int EYE_HEIGHT = 140;     /* Eye container height (larger to prevent cropping) */
+    const int PUPIL_SIZE = 100;     /* Pupil (white part) size */
 
-     /* Disable all scrolling flags to enforce 466x466 constraint */
-     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
-     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
-     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+    /* Left eye container - larger to accommodate pupil movement */
+    g.left_eye = lv_obj_create(g.idle_screen);
+    lv_obj_remove_style_all(g.left_eye);
+    lv_obj_set_size(g.left_eye, EYE_WIDTH, EYE_HEIGHT);
+    lv_obj_set_style_radius(g.left_eye, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(g.left_eye, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(g.left_eye, LV_OPA_COVER, 0);
+    lv_obj_set_style_clip_corner(g.left_eye, true, 0);  /* Enable clipping for bottom crop effect */
+    lv_obj_align(g.left_eye, LV_ALIGN_CENTER, -EYE_SPACING / 2, 0);
 
-     /* Center label */
-     lv_obj_t *label = lv_label_create(g.idle_screen);
-     lv_label_set_text(label, "Cattle AI Tracker\nIdle Animation. \n Push To Talk\n\nPress 'T' for Tracking\nPress 'S' "
-                              "for Settings\nPress 'I' for Info");
-     lv_obj_set_style_text_color(label, lv_color_white(), 0);
-     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-     lv_obj_center(label);
+    /* Left pupil (white oval) */
+    g.left_pupil = lv_obj_create(g.left_eye);
+    lv_obj_remove_style_all(g.left_pupil);
+    lv_obj_set_size(g.left_pupil, PUPIL_SIZE, PUPIL_SIZE);
+    lv_obj_set_style_radius(g.left_pupil, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(g.left_pupil, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(g.left_pupil, LV_OPA_COVER, 0);
+    lv_obj_center(g.left_pupil);
+
+    /* Right eye container - larger to accommodate pupil movement */
+    g.right_eye = lv_obj_create(g.idle_screen);
+    lv_obj_remove_style_all(g.right_eye);
+    lv_obj_set_size(g.right_eye, EYE_WIDTH, EYE_HEIGHT);
+    lv_obj_set_style_radius(g.right_eye, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(g.right_eye, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(g.right_eye, LV_OPA_COVER, 0);
+    lv_obj_set_style_clip_corner(g.right_eye, true, 0);  /* Enable clipping for bottom crop effect */
+    lv_obj_align(g.right_eye, LV_ALIGN_CENTER, EYE_SPACING / 2, 0);
+
+    /* Right pupil (white oval) */
+    g.right_pupil = lv_obj_create(g.right_eye);
+    lv_obj_remove_style_all(g.right_pupil);
+    lv_obj_set_size(g.right_pupil, PUPIL_SIZE, PUPIL_SIZE);
+    lv_obj_set_style_radius(g.right_pupil, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(g.right_pupil, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(g.right_pupil, LV_OPA_COVER, 0);
+    lv_obj_center(g.right_pupil);
+
+    /* Initialize eye state */
+    g.eye_state = 0;  /* Idle */
+    g.blink_phase = 0;
+    g.pupil_x_offset = 0;
+    g.pupil_y_offset = 0;
+
+    /* Start with a random look direction */
+    int initial_direction = rand() % 5;
+    if (initial_direction == 0) {
+        g.target_pupil_x = -18;  /* Look left */
+        g.target_pupil_y = 0;
+    } else if (initial_direction == 1) {
+        g.target_pupil_x = 18;   /* Look right */
+        g.target_pupil_y = 0;
+    } else if (initial_direction == 2) {
+        g.target_pupil_x = 0;    /* Look up */
+        g.target_pupil_y = -18;
+    } else {
+        g.target_pupil_x = 0;    /* Center */
+        g.target_pupil_y = 0;
+    }
+
+    /* Create blink timer - start with random interval between 3-6 seconds (longer idle time) */
+    int initial_blink_delay = 3000 + (rand() % 3000);
+    g.eye_blink_timer = lv_timer_create(eye_blink_timer_cb, initial_blink_delay, NULL);
+
+    /* Create look around timer - 50ms continuous update */
+    g.eye_look_timer = lv_timer_create(eye_look_timer_cb, 50, NULL);
+}
+
+/* Update pupil position based on current offsets */
+static void update_pupil_position(void)
+{
+    /* Apply pupil offset for looking around effect */
+    lv_obj_align(g.left_pupil, LV_ALIGN_CENTER, g.pupil_x_offset, g.pupil_y_offset);
+    lv_obj_align(g.right_pupil, LV_ALIGN_CENTER, g.pupil_x_offset, g.pupil_y_offset);
+}
+
+/* Update eye animation based on current state */
+static void update_eye_animation(void)
+{
+    const int EYE_WIDTH = 120;      /* Larger eyes */
+    const int EYE_HEIGHT = 120;     /* Larger eyes */
+    const int PUPIL_SIZE = 100;     /* Larger pupil */
+
+    if (g.eye_state == 0) {
+        /* Idle state - normal round eyes */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, EYE_HEIGHT);
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, EYE_HEIGHT);
+        lv_obj_set_size(g.left_pupil, PUPIL_SIZE, PUPIL_SIZE);
+        lv_obj_set_size(g.right_pupil, PUPIL_SIZE, PUPIL_SIZE);
+        update_pupil_position();
+
+    } else if (g.eye_state == 1) {
+        /* Blinking state - animate based on blink_phase (0-2, very quick blink) */
+        int blink_height = EYE_HEIGHT - (g.blink_phase * 50);  /* Quick dramatic blink */
+        if (blink_height < 20) blink_height = 20;
+
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, blink_height);
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, blink_height);
+        int pupil_height = blink_height - 15;
+        if (pupil_height < 15) pupil_height = 15;
+        lv_obj_set_size(g.left_pupil, PUPIL_SIZE, pupil_height);
+        lv_obj_set_size(g.right_pupil, PUPIL_SIZE, pupil_height);
+        update_pupil_position();
+
+    } else if (g.eye_state == 2) {
+        /* Happy state - curved/oval eyes (like happy squinting) */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, 40);  /* Flatter eyes (scaled proportionally) */
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, 40);
+        lv_obj_set_size(g.left_pupil, PUPIL_SIZE, 30);  /* Smaller pupils */
+        lv_obj_set_size(g.right_pupil, PUPIL_SIZE, 30);
+        update_pupil_position();
+    }
+}
+
+/* Set eye state (0=idle, 1=blinking, 2=happy) */
+static void set_eye_state(int state)
+{
+    g.eye_state = state;
+    update_eye_animation();
+}
+
+/* Eye blink timer callback - random blinking at different paces */
+static void eye_blink_timer_cb(lv_timer_t *timer)
+{
+    static int blink_step = 0;
+
+    if (g.eye_state == 1) {
+        /* Currently blinking */
+        g.blink_phase++;
+
+        if (g.blink_phase >= 2) {  /* Only 2 phases for very quick blink */
+            /* Start opening */
+            blink_step = 1;
+        }
+
+        if (blink_step == 1) {
+            g.blink_phase--;
+            if (g.blink_phase <= 0) {
+                /* Blink complete - set random next blink interval (3-7 seconds for more circle time) */
+                g.eye_state = 0;  /* Return to idle */
+                g.blink_phase = 0;
+                blink_step = 0;
+                update_eye_animation();
+                int next_blink = 3000 + (rand() % 4000);  /* Random 3-7 seconds */
+                lv_timer_set_period(timer, next_blink);
+                return;  /* Exit - don't override timer period */
+            }
+        }
+
+        /* Continue blink animation */
+        update_eye_animation();
+
+    } else if (g.eye_state == 0) {
+        /* Idle - start a quick blink */
+        g.eye_state = 1;
+        g.blink_phase = 0;
+        blink_step = 0;
+        int blink_speed = 25 + (rand() % 15);  /* Random speed 25-40ms per frame (very fast) */
+        lv_timer_set_period(timer, blink_speed);
+
+    } else if (g.eye_state == 2) {
+        /* Happy state - return to idle quickly (only stays for one timer call) */
+        static int happy_counter = 0;
+        happy_counter++;
+        if (happy_counter >= 10) {  /* Stay happy for ~300-500ms (10 cycles at 30-50ms) */
+            g.eye_state = 0;
+            happy_counter = 0;
+            update_eye_animation();
+            /* Set random next blink interval */
+            int next_blink = 1000 + (rand() % 2000);  /* Return to blinking faster (1-3 seconds) */
+            lv_timer_set_period(timer, next_blink);
+        } else {
+            /* Keep timer running fast during happy state */
+            lv_timer_set_period(timer, 50);
+        }
+    }
+}
+
+/* Eye look around timer callback - random eye movements */
+static void eye_look_timer_cb(lv_timer_t *timer)
+{
+    static int move_step = 0;
+    static bool moving = false;
+    const int MAX_OFFSET = 18;  /* Maximum pupil movement in pixels (larger for more visible movement) */
+
+    /* Smoothly move pupils towards target position (2px per step for faster movement) */
+    bool still_moving = false;
+
+    if (g.pupil_x_offset != g.target_pupil_x) {
+        if (g.pupil_x_offset < g.target_pupil_x) {
+            g.pupil_x_offset += 2;
+            if (g.pupil_x_offset > g.target_pupil_x) g.pupil_x_offset = g.target_pupil_x;
+        } else {
+            g.pupil_x_offset -= 2;
+            if (g.pupil_x_offset < g.target_pupil_x) g.pupil_x_offset = g.target_pupil_x;
+        }
+        still_moving = true;
+    }
+
+    if (g.pupil_y_offset != g.target_pupil_y) {
+        if (g.pupil_y_offset < g.target_pupil_y) {
+            g.pupil_y_offset += 2;
+            if (g.pupil_y_offset > g.target_pupil_y) g.pupil_y_offset = g.target_pupil_y;
+        } else {
+            g.pupil_y_offset -= 2;
+            if (g.pupil_y_offset < g.target_pupil_y) g.pupil_y_offset = g.target_pupil_y;
+        }
+        still_moving = true;
+    }
+
+    update_pupil_position();
+
+    /* If moving, keep fast update rate */
+    if (still_moving) {
+        moving = true;
+        lv_timer_set_period(timer, 50);  /* Fast updates during movement */
+        return;
+    }
+
+    /* Reached target position - hold for a moment */
+    if (moving) {
+        moving = false;
+        move_step = 0;
+    }
+
+    move_step++;
+
+    if (move_step >= 20) {  /* Hold position for ~1 second (20 * 50ms) */
+        /* Choose new random target position */
+        int direction = rand() % 10;
+
+        if (direction < 2) {
+            /* Look left */
+            g.target_pupil_x = -MAX_OFFSET;
+            g.target_pupil_y = 0;
+        } else if (direction < 4) {
+            /* Look right */
+            g.target_pupil_x = MAX_OFFSET;
+            g.target_pupil_y = 0;
+        } else if (direction < 5) {
+            /* Look up */
+            g.target_pupil_x = 0;
+            g.target_pupil_y = -MAX_OFFSET;
+        } else if (direction < 6) {
+            /* Look down */
+            g.target_pupil_x = 0;
+            g.target_pupil_y = MAX_OFFSET;
+        } else if (direction < 7) {
+            /* Look up-left */
+            g.target_pupil_x = -MAX_OFFSET / 2;
+            g.target_pupil_y = -MAX_OFFSET / 2;
+        } else if (direction < 8) {
+            /* Look up-right */
+            g.target_pupil_x = MAX_OFFSET / 2;
+            g.target_pupil_y = -MAX_OFFSET / 2;
+        } else {
+            /* Return to center */
+            g.target_pupil_x = 0;
+            g.target_pupil_y = 0;
+        }
+
+        move_step = 0;
+        moving = true;  /* Start moving to new target */
+    }
+
+    /* Keep timer running at 50ms during hold period */
+    lv_timer_set_period(timer, 50);
+}
+
+static void create_idle_screen(void)
+{
+    g.idle_screen = lv_obj_create(g.screen);
+    lv_obj_remove_style_all(g.idle_screen);
+    lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+    lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Disable all scrolling flags to enforce 466x466 constraint */
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+
+    /* Create animated eyes in center */
+    create_eyes();
 
     /* Bottom text - manual line breaking, maximum 3 lines with ellipsis */
-    g.idle_bottom_text = lv_label_create(g.idle_screen);
-    lv_obj_set_style_text_color(g.idle_bottom_text, lv_color_hex(0xAAAAAA), 0);
+     g.idle_bottom_text = lv_label_create(g.idle_screen);
+     lv_obj_set_style_text_color(g.idle_bottom_text, lv_color_hex(0xAAAAAA), 0);
     lv_obj_set_style_text_font(g.idle_bottom_text, &font_puhui_18_2, 0);
-    lv_obj_set_style_text_align(g.idle_bottom_text, LV_TEXT_ALIGN_CENTER, 0);
+     lv_obj_set_style_text_align(g.idle_bottom_text, LV_TEXT_ALIGN_CENTER, 0);
 
     /* Remove padding to maximize text area */
     lv_obj_set_style_pad_all(g.idle_bottom_text, 0, 0);
@@ -407,7 +709,7 @@
     lv_obj_align(g.idle_bottom_text, LV_ALIGN_BOTTOM_MID, 0, -20);
 
     /* Set initial text using update function to apply line breaking */
-    update_idle_bottom_text("你好，你知道我的牛在哪里吗？ 这个是长句子的断句测试，跨行换行功能，如果有太多行语音回复那就直接用...来替代。");
+    update_idle_bottom_text("你好，你知道我的牛在哪里吗？ 这个是长句子的断句测试，跨行换行功能，如果有太多行语音回复那就直接用滚动的动效来替代。希望长文本回复在小屏幕上面显示有更加好的效果。");
  }
 
  static void compass_build(lv_obj_t *parent)
@@ -1314,6 +1616,10 @@
      lv_obj_set_style_bg_opa(g.tracking_screen, LV_OPA_TRANSP, 0);
      lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* Add circular masking to tracking screen */
+    lv_obj_set_style_radius(g.tracking_screen, CIRCLE_RADIUS, 0);
+    lv_obj_set_style_clip_corner(g.tracking_screen, true, 0);
+
      /* Disable all scrolling flags to enforce 466x466 constraint and prevent scrolling during swipe gestures */
      lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
      lv_obj_clear_flag(g.tracking_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
@@ -1335,6 +1641,10 @@
      lv_obj_set_style_pad_all(g.map_container, 0, 0);
      lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_CLICKABLE);
      lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Add circular masking to map container */
+    lv_obj_set_style_radius(g.map_container, CIRCLE_RADIUS, 0);
+    lv_obj_set_style_clip_corner(g.map_container, true, 0);
 
      /* Disable all scrolling flags to enforce 466x466 constraint */
      lv_obj_clear_flag(g.map_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
@@ -1422,8 +1732,9 @@
      g.settings_panel = lv_obj_create(g.screen);
      lv_obj_set_size(g.settings_panel, CATTLE_SCREEN_WIDTH, SETTINGS_PANEL_HEIGHT);
      lv_obj_align(g.settings_panel, LV_ALIGN_TOP_MID, 0, -SETTINGS_PANEL_HEIGHT);
-     lv_obj_set_style_radius(g.settings_panel, 0, 0);
-     lv_obj_set_style_bg_color(g.settings_panel, lv_color_hex(0x182028), 0);
+    lv_obj_set_style_radius(g.settings_panel, CIRCLE_RADIUS, 0);
+    lv_obj_set_style_clip_corner(g.settings_panel, true, 0);
+    lv_obj_set_style_bg_color(g.settings_panel, lv_color_black(), 0);
      lv_obj_set_style_bg_opa(g.settings_panel, LV_OPA_COVER, 0);
      lv_obj_set_style_border_width(g.settings_panel, 0, 0);
      lv_obj_set_style_pad_all(g.settings_panel, 0, 0);
@@ -1437,56 +1748,128 @@
      lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ONE);
      lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-     /* Title */
-     lv_obj_t *title = lv_label_create(g.settings_panel);
-     lv_label_set_text(title, "Settings");
-     lv_obj_set_style_text_color(title, lv_color_white(), 0);
-     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
+    /* GPS Status at top with icon */
+    lv_obj_t *gps_icon = lv_label_create(g.settings_panel);
+    lv_label_set_text(gps_icon, LV_SYMBOL_GPS);
+    lv_obj_set_style_text_color(gps_icon, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_style_text_font(gps_icon, &lv_font_montserrat_20, 0);
+    lv_obj_align(gps_icon, LV_ALIGN_TOP_MID, -40, 35);  /* Moved up by 5px */
 
-     /* GPS Status - positioned for larger panel */
      lv_obj_t *gps_label = lv_label_create(g.settings_panel);
-     char buf[64];
-     snprintf(buf, sizeof(buf), "GPS Status: %d satellites", g.gps_sat_count);
-     lv_label_set_text(gps_label, buf);
-     lv_obj_set_style_text_color(gps_label, lv_color_hex(0x00AA00), 0);
-     lv_obj_set_style_text_align(gps_label, LV_TEXT_ALIGN_CENTER, 0);
-     lv_obj_align(gps_label, LV_ALIGN_CENTER, 0, -80);
+    lv_label_set_text(gps_label, "GPS状态");
+    lv_obj_set_style_text_color(gps_label, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_style_text_font(gps_label, &font_puhui_18_2, 0);
+    lv_obj_align(gps_label, LV_ALIGN_TOP_MID, 20, 35);  /* Moved up by 5px */
 
-     /* Time/Date - positioned for larger panel */
+    lv_obj_t *gps_sats = lv_label_create(g.settings_panel);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "七颗卫星");
+    lv_label_set_text(gps_sats, buf);
+    lv_obj_set_style_text_color(gps_sats, lv_color_white(), 0);
+    lv_obj_set_style_text_font(gps_sats, &font_puhui_18_2, 0);
+    lv_obj_align(gps_sats, LV_ALIGN_TOP_MID, 0, 65);  /* Moved up by 5px */
+
+    /* Large centered clock display */
+    lv_obj_t *date_label = lv_label_create(g.settings_panel);
+    lv_label_set_text(date_label, "2024 / 01 / 15");
+    lv_obj_set_style_text_color(date_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(date_label, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_LEFT, 0);  /* Align to left */
+    lv_obj_align(date_label, LV_ALIGN_CENTER, -95, -65);  // Move to left by 20px
+
      lv_obj_t *time_label = lv_label_create(g.settings_panel);
-     lv_label_set_text(time_label, "Time: 14:30:25\nDate: 2024-01-15");
+    lv_label_set_text(time_label, "14:30");
      lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
-     lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_CENTER, 0);
-     lv_obj_align(time_label, LV_ALIGN_CENTER, 0, -40);
+    lv_obj_set_style_text_font(time_label, &montserrat_time_82_extra_bold, 0);  /* Larger font */
+    lv_obj_align(time_label, LV_ALIGN_CENTER, -50, 0);  // Moved left by 20px
 
-     /* Volume slider - positioned for larger panel */
+    /* Status icons on the right side */
+    /* 4G/Signal indicator circle background */
+    lv_obj_t *signal_bg = lv_obj_create(g.settings_panel);
+    lv_obj_set_size(signal_bg, 80, 80);
+    lv_obj_align(signal_bg, LV_ALIGN_RIGHT_MID, -65, -60);  /* 15px right, 10px up */
+    lv_obj_set_style_radius(signal_bg, 40, 0);
+    lv_obj_set_style_bg_color(signal_bg, lv_color_hex(0x222222), 0);
+    lv_obj_set_style_border_width(signal_bg, 0, 0);
+
+    // lv_obj_t *signal_text = lv_label_create(signal_bg);
+    // lv_label_set_text(signal_text, "4G");
+    // lv_obj_set_style_text_color(signal_text, lv_color_white(), 0);
+    // lv_obj_set_style_text_font(signal_text, &lv_font_montserrat_14, 0);
+    // lv_obj_align(signal_text, LV_ALIGN_TOP_MID, 0, 10);
+
+    lv_obj_t *signal_bars = lv_label_create(signal_bg);
+    lv_label_set_text(signal_bars, LV_SYMBOL_WIFI);
+    lv_obj_set_style_text_color(signal_bars, lv_color_white(), 0);
+    lv_obj_set_style_text_font(signal_bars, &lv_font_montserrat_24, 0);
+    lv_obj_align(signal_bars, LV_ALIGN_BOTTOM_MID, 0, -8);
+
+    /* Battery indicator circle background */
+    lv_obj_t *battery_bg = lv_obj_create(g.settings_panel);
+    lv_obj_set_size(battery_bg, 80, 80);
+    lv_obj_align(battery_bg, LV_ALIGN_RIGHT_MID, -65, 30);  /* 15px right, 10px up */
+    lv_obj_set_style_radius(battery_bg, 40, 0);
+    lv_obj_set_style_bg_color(battery_bg, lv_color_hex(0x222222), 0);
+    lv_obj_set_style_border_width(battery_bg, 0, 0);
+
+    lv_obj_t *battery_icon = lv_label_create(battery_bg);
+    lv_label_set_text(battery_icon, LV_SYMBOL_BATTERY_FULL);
+    lv_obj_set_style_text_color(battery_icon, lv_color_white(), 0);
+    lv_obj_set_style_text_font(battery_icon, &lv_font_montserrat_24, 0);
+    lv_obj_center(battery_icon);
+
+    /* Volume section at bottom */
+    lv_obj_t *vol_icon = lv_label_create(g.settings_panel);
+    lv_label_set_text(vol_icon, LV_SYMBOL_VOLUME_MAX);
+    lv_obj_set_style_text_color(vol_icon, lv_color_hex(0x1E90FF), 0);
+    lv_obj_set_style_text_font(vol_icon, &lv_font_montserrat_20, 0);
+    lv_obj_align(vol_icon, LV_ALIGN_BOTTOM_LEFT, 85, -135);  /* Moved up by 15px */
+
      lv_obj_t *vol_label = lv_label_create(g.settings_panel);
-     lv_label_set_text(vol_label, "Volume:");
-     lv_obj_set_style_text_color(vol_label, lv_color_white(), 0);
-     lv_obj_align(vol_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(vol_label, "音量");
+    lv_obj_set_style_text_color(vol_label, lv_color_hex(0x1E90FF), 0);
+    lv_obj_set_style_text_font(vol_label, &font_puhui_18_2, 0);
+    lv_obj_align(vol_label, LV_ALIGN_BOTTOM_LEFT, 120, -135);  /* Moved up by 15px */
 
+    /* Create custom styled slider matching the design */
      lv_obj_t *slider = lv_slider_create(g.settings_panel);
-     lv_obj_set_width(slider, 250);
-     lv_obj_align(slider, LV_ALIGN_CENTER, 0, 30);
+    lv_obj_set_width(slider, 280);  /* Shorter slider */
+    lv_obj_set_height(slider, 10);
+    lv_obj_align(slider, LV_ALIGN_BOTTOM_MID, 0, -105);  /* Moved up by 15px */
      lv_slider_set_range(slider, 0, 100);
-     lv_slider_set_value(slider, 50, LV_ANIM_OFF);
-     lv_obj_set_style_bg_color(slider, lv_color_hex(0x00AA00), LV_PART_INDICATOR);
+    lv_slider_set_value(slider, 60, LV_ANIM_OFF);
 
-     /* Draggable tab at bottom */
+    /* Style for the main track (background/unfilled part) */
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0x2D3E50), LV_PART_MAIN);
+    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(slider, -2, LV_PART_MAIN); /* Makes indicator slightly larger */
+
+    /* Style for the indicator (filled/blue part) */
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0x1E90FF), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+
+    /* Style for the knob (circular white handle) */
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider, lv_color_white(), LV_PART_KNOB);
+    lv_obj_set_style_border_width(slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider, 10, LV_PART_KNOB); /* Makes knob larger */
+    lv_obj_set_style_shadow_width(slider, 8, LV_PART_KNOB);
+    lv_obj_set_style_shadow_color(slider, lv_color_black(), LV_PART_KNOB);
+    lv_obj_set_style_shadow_opa(slider, LV_OPA_20, LV_PART_KNOB);
+
+
+    /* Draggable tab at very bottom */
      g.settings_drag_tab = lv_obj_create(g.settings_panel);
-     lv_obj_set_size(g.settings_drag_tab, 60, 8);
-     lv_obj_align(g.settings_drag_tab, LV_ALIGN_BOTTOM_MID, 0, -10);
-     lv_obj_set_style_bg_color(g.settings_drag_tab, lv_color_hex(0x666666), 0);
-     lv_obj_set_style_radius(g.settings_drag_tab, 4, 0);
+    lv_obj_set_size(g.settings_drag_tab, 60, 6);
+    lv_obj_align(g.settings_drag_tab, LV_ALIGN_BOTTOM_MID, 0, -15);
+    lv_obj_set_style_bg_color(g.settings_drag_tab, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(g.settings_drag_tab, 3, 0);
      lv_obj_set_style_border_width(g.settings_drag_tab, 0, 0);
      lv_obj_add_event_cb(g.settings_drag_tab, on_settings_drag, LV_EVENT_PRESSING, NULL);
      lv_obj_add_event_cb(g.settings_drag_tab, on_settings_drag, LV_EVENT_RELEASED, NULL);
-
-     /* Close instruction */
-     lv_obj_t *close_hint = lv_label_create(g.settings_panel);
-     lv_label_set_text(close_hint, "Press 'S' to close");
-     lv_obj_set_style_text_color(close_hint, lv_color_hex(0xAAAAAA), 0);
-     lv_obj_align(close_hint, LV_ALIGN_BOTTOM_MID, 0, -30);
  }
 
  static void create_sos_screen(void)
@@ -1685,20 +2068,29 @@
      if (indev_type == LV_INDEV_TYPE_POINTER) {
          lv_dir_t dir = lv_indev_get_gesture_dir(indev);
 
+        /* Check if settings panel is visible */
+        bool settings_visible = !lv_obj_has_flag(g.settings_panel, LV_OBJ_FLAG_HIDDEN);
+
          switch (dir) {
          case LV_DIR_TOP: // Swipe up - close settings
-             if (!lv_obj_has_flag(g.settings_panel, LV_OBJ_FLAG_HIDDEN)) {
+            if (settings_visible) {
                  printf("Swipe up - closing settings with animation\n");
                  slide_settings(false);
              }
              break;
          case LV_DIR_BOTTOM: // Swipe down - open settings
-             if (lv_obj_has_flag(g.settings_panel, LV_OBJ_FLAG_HIDDEN)) {
+            if (!settings_visible) {
                  printf("Swipe down - opening settings\n");
                  slide_settings(true);
              }
              break;
          case LV_DIR_LEFT: // Swipe left - tracking screen
+            /* Disable left/right swipes when settings panel is visible to avoid
+             * interfering with volume slider */
+            if (settings_visible) {
+                printf("Swipe left - ignored, settings panel is open\n");
+                break;
+            }
              if (lv_obj_has_flag(g.tracking_screen, LV_OBJ_FLAG_HIDDEN)) {
                  printf("Swipe left - showing tracking\n");
                  slide_tracking(true);
@@ -1707,6 +2099,12 @@
              }
              break;
          case LV_DIR_RIGHT: // Swipe right - idle screen
+            /* Disable left/right swipes when settings panel is visible to avoid
+             * interfering with volume slider */
+            if (settings_visible) {
+                printf("Swipe right - ignored, settings panel is open\n");
+                break;
+            }
              if (lv_obj_has_flag(g.idle_screen, LV_OBJ_FLAG_HIDDEN)) {
                  printf("Swipe right - showing idle\n");
                  show_idle();
@@ -1796,13 +2194,93 @@
          printf("Key 5 - animating to 3km scale\n");
          animate_distance_scale(3000);
          break;
-     case '6': // 5km scale
-         printf("Key 6 - animating to 5km scale\n");
-         animate_distance_scale(5000);
-         break;
-     default:
-         printf("Unhandled key: %d\n", key);
-         break;
+    case '6': // 5km scale
+        printf("Key 6 - animating to 5km scale\n");
+        animate_distance_scale(5000);
+        break;
+
+    /* Eye animation controls */
+    case 'n':
+    case 'N': // Normal/Idle eyes
+        printf("Key N - resetting to idle eyes\n");
+        set_idle_eye_state(0);  // 0 = idle state
+        break;
+    case 'h':
+    case 'H': // Happy eyes
+        printf("Key H - triggering happy eyes\n");
+        set_idle_eye_state(2);  // 2 = happy state
+        break;
+    case 'b':
+    case 'B': // Manual blink
+        printf("Key B - triggering manual blink\n");
+        set_idle_eye_state(1);  // 1 = blinking state
+        break;
+    case 'l':
+    case 'L': // Look left
+        printf("Key L - looking left\n");
+        g.target_pupil_x = -18;
+        g.target_pupil_y = 0;
+        break;
+    case 'r':
+    case 'R': // Look right
+        printf("Key R - looking right\n");
+        g.target_pupil_x = 18;
+        g.target_pupil_y = 0;
+        break;
+    case 'u':
+    case 'U': // Look up
+        printf("Key U - looking up\n");
+        g.target_pupil_x = 0;
+        g.target_pupil_y = -18;
+        break;
+    case 'd':
+    case 'D': // Look down
+        printf("Key D - looking down\n");
+        g.target_pupil_x = 0;
+        g.target_pupil_y = 18;
+        break;
+    case 'c':
+    case 'C': // Look center
+        printf("Key C - looking center\n");
+        g.target_pupil_x = 0;
+        g.target_pupil_y = 0;
+        break;
+    case 'e':
+    case 'E': // Random eye movement
+        printf("Key E - random eye movement\n");
+        {
+            int direction = rand() % 8;
+            if (direction == 0) {
+                g.target_pupil_x = -18;
+                g.target_pupil_y = 0;
+            } else if (direction == 1) {
+                g.target_pupil_x = 18;
+                g.target_pupil_y = 0;
+            } else if (direction == 2) {
+                g.target_pupil_x = 0;
+                g.target_pupil_y = -18;
+            } else if (direction == 3) {
+                g.target_pupil_x = 0;
+                g.target_pupil_y = 18;
+            } else if (direction == 4) {
+                g.target_pupil_x = -9;
+                g.target_pupil_y = -9;
+            } else if (direction == 5) {
+                g.target_pupil_x = 9;
+                g.target_pupil_y = -9;
+            } else if (direction == 6) {
+                g.target_pupil_x = -9;
+                g.target_pupil_y = 9;
+            } else {
+                g.target_pupil_x = 9;
+                g.target_pupil_y = 9;
+            }
+        }
+        break;
+
+    default:
+        printf("Unhandled key: %d\n", key);
+        break;
      }
  }
 
@@ -2077,24 +2555,26 @@ static int utf8_char_to_byte_pos(const char *text, int char_limit)
     return byte_pos;
 }
 
-/* Function to update idle screen bottom text with manual line breaking */
-void update_idle_bottom_text(const char *text)
+/* Helper function to get the size of the next UTF-8 character */
+static int utf8_next_char_size(const char *text, int pos)
+{
+    unsigned char c = text[pos];
+    if ((c & 0x80) == 0) return 1;           // ASCII
+    else if ((c & 0xE0) == 0xC0) return 2;   // 2-byte UTF-8
+    else if ((c & 0xF0) == 0xE0) return 3;   // 3-byte UTF-8 (Chinese)
+    else if ((c & 0xF8) == 0xF0) return 4;   // 4-byte UTF-8
+    else return 1;                            // Invalid, skip one byte
+}
+
+/* Static version of update function (doesn't trigger animation) */
+static void update_idle_bottom_text_static(const char *text)
 {
     if (g.idle_bottom_text) {
         static char display_text[300]; // Buffer for formatted text with line breaks
         const int MAX_LINES = 3;         // Maximum number of lines
         const lv_font_t *font = &font_puhui_18_2;
 
-        /* Different width for each line based on circular geometry
-         * Screen radius: 233px, center at (233, 233)
-         * Text positioned at bottom (y=-20), spanning ~60px height for 3 lines
-         * Row 1 (top, ~y=446-80=366 from top, 100 from bottom):
-         *   Distance from center: 233-100=133px, chord = 2*sqrt(233^2-133^2) ≈ 380px (use 280px safe)
-         * Row 2 (mid, ~y=446-60=386 from top, 80 from bottom):
-         *   Distance from center: 233-80=153px, chord = 2*sqrt(233^2-153^2) ≈ 350px (use 240px safe)
-         * Row 3 (bot, ~y=446-40=406 from top, 60 from bottom):
-         *   Distance from center: 233-60=173px, chord = 2*sqrt(233^2-173^2) ≈ 310px (use 180px safe)
-         */
+        /* Different width for each line based on circular geometry */
         const int LINE_WIDTHS[3] = {280, 240, 180};
 
         if (text == NULL || text[0] == '\0') {
@@ -2160,10 +2640,7 @@ void update_idle_bottom_text(const char *text)
                 /* No progress made - force at least one character */
                 if (line_len == 0 && text[in_pos] != '\0') {
                     /* Force copy at least one character to avoid infinite loop */
-                    int char_size = 1;
-                    if ((text[in_pos] & 0xE0) == 0xC0) char_size = 2;
-                    else if ((text[in_pos] & 0xF0) == 0xE0) char_size = 3;
-                    else if ((text[in_pos] & 0xF8) == 0xF0) char_size = 4;
+                    int char_size = utf8_next_char_size(text, in_pos);
 
                     if (out_pos + char_size < sizeof(display_text) - 10) {
                         memcpy(&display_text[out_pos], &text[in_pos], char_size);
@@ -2226,10 +2703,7 @@ void update_idle_bottom_text(const char *text)
         display_text[out_pos] = '\0';
         lv_label_set_text(g.idle_bottom_text, display_text);
 
-        /* Adjust vertical position based on number of lines
-         * More lines = lower position (closer to bottom)
-         * Fewer lines = higher position (to stay within circular boundary)
-         */
+        /* Adjust vertical position based on number of lines */
         int y_offset;
         if (line_count == 1) {
             y_offset = -50;  /* Single line - position higher */
@@ -2242,7 +2716,161 @@ void update_idle_bottom_text(const char *text)
     }
 }
 
- /* Public GPS API Functions */
+/* Typewriter animation timer callback */
+static void typewriter_timer_cb(lv_timer_t *timer)
+{
+    if (!g.typewriter_active || !g.typewriter_full_text) {
+        return;
+    }
+
+    int text_len = strlen(g.typewriter_full_text);
+    const int MAX_DISPLAY_CHARS = 38; // ~38 chars fit in 3 lines
+
+    /* Count how many characters we've displayed so far */
+    int displayed_chars = 0;
+    int pos = g.typewriter_window_start;
+    while (pos < g.typewriter_char_index && pos < text_len) {
+        if ((g.typewriter_full_text[pos] & 0xC0) != 0x80) {
+            displayed_chars++;
+        }
+        pos++;
+    }
+
+    /* Check if we're in scrolling mode (display window is full) */
+    bool is_scrolling = (displayed_chars >= MAX_DISPLAY_CHARS);
+
+    /* Check if the last displayed character was Chinese punctuation for extra pause */
+    bool just_displayed_punctuation = false;
+    if (g.typewriter_char_index >= 3) {
+        /* Check for "，" (E3 80 81) or "。" (E3 80 82) */
+        const unsigned char *text_bytes = (const unsigned char *)g.typewriter_full_text;
+        int prev_pos = g.typewriter_char_index - 3;
+
+        if (prev_pos >= 0 && prev_pos < text_len - 2) {
+            /* Chinese comma "，" is 0xE3 0x80 0x81 */
+            /* Chinese period "。" is 0xE3 0x80 0x82 */
+            if (text_bytes[prev_pos] == 0xE3 && text_bytes[prev_pos + 1] == 0x80) {
+                if (text_bytes[prev_pos + 2] == 0x81 || text_bytes[prev_pos + 2] == 0x82) {
+                    just_displayed_punctuation = true;
+                }
+            }
+        }
+    }
+
+    /* Adjust timer period based on mode and punctuation */
+    if (just_displayed_punctuation && !is_scrolling) {
+        lv_timer_set_period(g.typewriter_timer, 600); // Extra pause at punctuation (300ms)
+    } else if (is_scrolling) {
+        lv_timer_set_period(g.typewriter_timer, 200); // Slower scroll (150ms per char)
+    } else {
+        lv_timer_set_period(g.typewriter_timer, 100);  // Fast typewriter (50ms per char)
+    }
+
+    /* Extract window of text to display */
+    static char window_text[500];
+    int window_size = 0;
+    int byte_pos = g.typewriter_window_start;
+    int char_count = 0;
+
+    /* Build the window text character by character up to current index */
+    while (byte_pos < text_len && byte_pos <= g.typewriter_char_index && char_count < MAX_DISPLAY_CHARS) {
+        int char_size = utf8_next_char_size(g.typewriter_full_text, byte_pos);
+
+        if (window_size + char_size < sizeof(window_text) - 1) {
+            memcpy(&window_text[window_size], &g.typewriter_full_text[byte_pos], char_size);
+            window_size += char_size;
+            char_count++;
+        }
+
+        byte_pos += char_size;
+    }
+    window_text[window_size] = '\0';
+
+    /* Update display with current window */
+    update_idle_bottom_text_static(window_text);
+
+    /* Advance to next character */
+    if (g.typewriter_char_index < text_len) {
+        int char_size = utf8_next_char_size(g.typewriter_full_text, g.typewriter_char_index);
+        g.typewriter_char_index += char_size;
+
+        /* Recalculate displayed characters after advance */
+        displayed_chars = 0;
+        pos = g.typewriter_window_start;
+        while (pos < g.typewriter_char_index && pos < text_len) {
+            if ((g.typewriter_full_text[pos] & 0xC0) != 0x80) {
+                displayed_chars++;
+            }
+            pos++;
+        }
+
+        /* Slide window forward if we exceed display capacity */
+        if (displayed_chars > MAX_DISPLAY_CHARS) {
+            /* Move window start forward by one character */
+            int skip_size = utf8_next_char_size(g.typewriter_full_text, g.typewriter_window_start);
+            g.typewriter_window_start += skip_size;
+        }
+    } else {
+        /* Animation complete - pause briefly, then restart */
+        static int pause_counter = 0;
+        pause_counter++;
+
+        if (pause_counter >= 20) { // Pause for ~1 second (20 * 50ms)
+            /* Clear display */
+            if (g.idle_bottom_text) {
+                lv_label_set_text(g.idle_bottom_text, "");
+            }
+
+            /* Reset animation to start from beginning */
+            g.typewriter_char_index = 0;
+            g.typewriter_window_start = 0;
+            pause_counter = 0;
+
+            /* Reset timer to fast speed for typewriter effect */
+            lv_timer_set_period(g.typewriter_timer, 50);
+        }
+    }
+}
+
+/* Function to update idle screen bottom text with typewriter animation */
+ void update_idle_bottom_text(const char *text)
+ {
+    /* Stop any existing animation */
+    if (g.typewriter_timer) {
+        lv_timer_del(g.typewriter_timer);
+        g.typewriter_timer = NULL;
+    }
+
+    if (g.typewriter_full_text) {
+        free(g.typewriter_full_text);
+        g.typewriter_full_text = NULL;
+    }
+
+    if (text == NULL || text[0] == '\0') {
+        g.typewriter_active = false;
+     if (g.idle_bottom_text) {
+            lv_label_set_text(g.idle_bottom_text, "");
+        }
+        return;
+    }
+
+    /* Store the full text */
+    g.typewriter_full_text = strdup(text);
+    g.typewriter_char_index = 0;
+    g.typewriter_window_start = 0;
+    g.typewriter_active = true;
+
+    /* Create timer for animation - 50ms per character (~20 chars/second) */
+    g.typewriter_timer = lv_timer_create(typewriter_timer_cb, 50, NULL);
+}
+
+/* Public eye animation API */
+void set_idle_eye_state(int state)
+{
+    set_eye_state(state);
+}
+
+/* Public GPS API Functions */
  void gps_add_target(float lat, float lon, uint32_t color)
  {
      add_target_coord(lat, lon, color);
