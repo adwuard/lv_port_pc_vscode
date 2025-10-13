@@ -106,6 +106,17 @@ else()
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_20_4.c
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/font_puhui_30_4.c
         ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/font/montserrat_time_82_extra_bold.c
+        # Icon resources
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/battery_full.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/battery_charging.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/battery_70.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/battery_50.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/battery_20.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/4g_enable.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/4g_disabled.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/wifi_enable.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/gps_icon.c
+        ${PROJECT_SOURCE_DIR}/cattle-ai-tracker/resources/icons/volume_icon.c
     )
 endif()
 

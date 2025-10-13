@@ -29,6 +29,17 @@ LV_FONT_DECLARE(font_puhui_20_4);
 // LV_FONT_DECLARE(font_puhui_30_4);
 LV_FONT_DECLARE(montserrat_time_82_extra_bold);
 
+/* Icon image declarations */
+LV_IMG_DECLARE(battery_full);
+LV_IMG_DECLARE(battery_charging);
+LV_IMG_DECLARE(battery_70);
+LV_IMG_DECLARE(battery_50);
+LV_IMG_DECLARE(battery_20);
+LV_IMG_DECLARE(_4g_enable);
+LV_IMG_DECLARE(_4g_disabled);
+LV_IMG_DECLARE(wifi_enable);
+LV_IMG_DECLARE(gps_icon);
+LV_IMG_DECLARE(volume_icon);
 
 /* Target marker colors */
  typedef enum {
@@ -153,14 +164,67 @@ void set_idle_eye_state(int state);
  void gps_update_target_markers(void);
  void gps_mark_data_dirty(void);
 
- /* Dummy data access functions */
- float gps_get_dummy_self_lat(void);
- float gps_get_dummy_self_lon(void);
- int gps_get_dummy_target_count(void);
- const void *gps_get_dummy_target(int index);
+/* Dummy data access functions */
+float gps_get_dummy_self_lat(void);
+float gps_get_dummy_self_lon(void);
+int gps_get_dummy_target_count(void);
+const void *gps_get_dummy_target(int index);
 
- #ifdef __cplusplus
- }
- #endif
+/* Icon state management functions
+ * APIs to dynamically change icons in the settings panel
+ */
 
- #endif /* CATTLE_AI_TRACKER_APP_H */
+/* Battery icon state management
+ * Sets the battery icon based on level and charging status
+ * @param level: 0=20%, 1=50%, 2=70%, 3=full (100%)
+ * @param is_charging: true if battery is charging
+ */
+void set_battery_icon(int level, bool is_charging);
+
+/* Network icon state management (4G/WiFi)
+ * @param use_4g: true for 4G, false for WiFi
+ * @param is_enabled: true if connected, false if disabled
+ */
+void set_network_icon(bool use_4g, bool is_enabled);
+
+/* Settings panel time and date management
+ * Updates the time display in 24-hour format (HH:MM)
+ * @param hour: Hour value (0-23)
+ * @param minute: Minute value (0-59)
+ */
+void set_settings_time(int hour, int minute);
+
+/* Updates the date display (YYYY / MM / DD)
+ * @param year: Year value (e.g., 2024)
+ * @param month: Month value (1-12)
+ * @param day: Day value (1-31)
+ */
+void set_settings_date(int year, int month, int day);
+
+/* Volume control management
+ * Sets the volume value and updates the slider with animation
+ * @param volume: Volume value (0-100)
+ */
+void set_volume(int volume);
+
+/* Gets the current volume value
+ * @return Volume value (0-100)
+ */
+int get_volume(void);
+
+/* GPS satellite count management
+ * Sets the GPS satellite count display with English numbering
+ * Text color changes based on signal strength:
+ *   - Red: 0-9 satellites (poor signal)
+ *   - Orange: 10-19 satellites (moderate signal)
+ *   - Green: 20+ satellites (good signal)
+ * @param count: Number of satellites (0-32)
+ * Examples: 0="0 颗卫星", 7="7 颗卫星", 15="15 颗卫星", 32="32 颗卫星"
+ */
+void set_gps_satellite_count(int count);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* CATTLE_AI_TRACKER_APP_H */

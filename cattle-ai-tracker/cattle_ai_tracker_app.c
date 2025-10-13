@@ -51,7 +51,7 @@
  #define SETTINGS_PANEL_HEIGHT CATTLE_SCREEN_HEIGHT // Full screen height
 
  /* Feature flags */
- #define ENABLE_CLOSE_TRACKING 1 // Set to 1 to enable close tracking mode, 0 to disable
+ #define ENABLE_CLOSE_TRACKING 0 // Set to 1 to enable close tracking mode, 0 to disable
 
  /**********************
   *      TYPEDEFS
@@ -162,14 +162,29 @@
     lv_obj_t *right_pupil;           /* Right eye white part */
     lv_timer_t *eye_blink_timer;     /* Blink animation timer */
     lv_timer_t *eye_look_timer;      /* Eye movement timer */
-    int eye_state;                   /* 0=idle, 1=blinking, 2=happy */
+    int eye_state;                   /* 0=idle, 1=blink, 2=happy, 3=surprised, 4=sleepy, 5=wink, 6=angry */
     int blink_phase;                 /* Blink animation phase */
-    int pupil_x_offset;              /* Pupil horizontal offset (-10 to 10) */
-    int pupil_y_offset;              /* Pupil vertical offset (-10 to 10) */
+    int pupil_x_offset;              /* Pupil horizontal offset */
+    int pupil_y_offset;              /* Pupil vertical offset */
     int target_pupil_x;              /* Target pupil X position */
     int target_pupil_y;              /* Target pupil Y position */
+    int pupil_size;                  /* Current pupil size (for dilation effect) */
+    int target_pupil_size;           /* Target pupil size */
+    int blink_variation;             /* 0=normal, 1=double, 2=slow */
 
-#if ENABLE_CLOSE_TRACKING
+    /* Settings panel icon objects */
+    lv_obj_t *battery_icon_img;      /* Battery icon image */
+    lv_obj_t *network_icon_img;      /* Network (4G/WiFi) icon image */
+    lv_obj_t *gps_icon_img;          /* GPS icon image */
+
+    /* Settings panel control objects */
+    lv_obj_t *settings_time_label;   /* Time label (HH:MM format) */
+    lv_obj_t *settings_date_label;   /* Date label (YYYY / MM / DD format) */
+    lv_obj_t *settings_volume_slider; /* Volume slider control */
+    lv_obj_t *settings_gps_sats_label; /* GPS satellites count label */
+    int current_volume;              /* Current volume value (0-100) */
+
+ #if ENABLE_CLOSE_TRACKING
      /* Close-range navigation mode */
      bool close_range_mode;
      lv_obj_t *close_nav_container;
@@ -273,7 +288,164 @@ static void update_pupil_position(void);
  /**********************
   *   GLOBAL FUNCTIONS
   **********************/
- void lv_demo_cattle_ai_tracker(void)
+
+/* Icon state management API implementations */
+
+/**
+ * Sets the battery icon based on level and charging status
+ * @param level: 0=20%, 1=50%, 2=70%, 3=full (100%)
+ * @param is_charging: true if battery is charging
+ */
+void set_battery_icon(int level, bool is_charging)
+{
+    if (!g.battery_icon_img) return;  /* Safety check */
+
+    if (is_charging) {
+        lv_img_set_src(g.battery_icon_img, &battery_charging);
+    } else {
+        switch (level) {
+            case 0:
+                lv_img_set_src(g.battery_icon_img, &battery_20);
+                break;
+            case 1:
+                lv_img_set_src(g.battery_icon_img, &battery_50);
+                break;
+            case 2:
+                lv_img_set_src(g.battery_icon_img, &battery_70);
+                break;
+            case 3:
+            default:
+                lv_img_set_src(g.battery_icon_img, &battery_full);
+                break;
+        }
+    }
+}
+
+/**
+ * Sets the network icon (4G/WiFi) based on type and status
+ * @param use_4g: true for 4G, false for WiFi
+ * @param is_enabled: true if connected, false if disabled
+ */
+void set_network_icon(bool use_4g, bool is_enabled)
+{
+    if (!g.network_icon_img) return;  /* Safety check */
+
+    if (use_4g) {
+        if (is_enabled) {
+            lv_img_set_src(g.network_icon_img, &_4g_enable);
+        } else {
+            lv_img_set_src(g.network_icon_img, &_4g_disabled);
+        }
+    } else {
+        /* WiFi always shows as enabled */
+        lv_img_set_src(g.network_icon_img, &wifi_enable);
+    }
+}
+
+/**
+ * Updates the time display in the settings panel (24-hour format)
+ * @param hour: Hour value (0-23)
+ * @param minute: Minute value (0-59)
+ */
+void set_settings_time(int hour, int minute)
+{
+    if (!g.settings_time_label) return;  /* Safety check */
+
+    /* Clamp values to valid ranges */
+    if (hour < 0) hour = 0;
+    if (hour > 23) hour = 23;
+    if (minute < 0) minute = 0;
+    if (minute > 59) minute = 59;
+
+    char time_buf[16];
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d", hour, minute);
+    lv_label_set_text(g.settings_time_label, time_buf);
+}
+
+/**
+ * Updates the date display in the settings panel
+ * @param year: Year value (e.g., 2024)
+ * @param month: Month value (1-12)
+ * @param day: Day value (1-31)
+ */
+void set_settings_date(int year, int month, int day)
+{
+    if (!g.settings_date_label) return;  /* Safety check */
+
+    /* Clamp values to valid ranges */
+    if (year < 2000) year = 2000;
+    if (year > 2099) year = 2099;
+    if (month < 1) month = 1;
+    if (month > 12) month = 12;
+    if (day < 1) day = 1;
+    if (day > 31) day = 31;
+
+    char date_buf[32];
+    snprintf(date_buf, sizeof(date_buf), "%04d / %02d / %02d", year, month, day);
+    lv_label_set_text(g.settings_date_label, date_buf);
+}
+
+/**
+ * Sets the volume value and updates the slider
+ * @param volume: Volume value (0-100)
+ */
+void set_volume(int volume)
+{
+    if (!g.settings_volume_slider) return;  /* Safety check */
+
+    /* Clamp value to valid range */
+    if (volume < 0) volume = 0;
+    if (volume > 100) volume = 100;
+
+    g.current_volume = volume;
+    lv_slider_set_value(g.settings_volume_slider, volume, LV_ANIM_ON);
+}
+
+/**
+ * Gets the current volume value
+ * @return Volume value (0-100)
+ */
+int get_volume(void)
+{
+    /* If slider exists, read from it to get the most current value */
+    if (g.settings_volume_slider) {
+        g.current_volume = lv_slider_get_value(g.settings_volume_slider);
+    }
+    return g.current_volume;
+}
+
+/**
+ * Sets the GPS satellite count display
+ * @param count: Number of satellites (1-32)
+ */
+void set_gps_satellite_count(int count)
+{
+
+    if (!g.settings_gps_sats_label) return;  /* Safety check */
+
+    /* Clamp value to valid range */
+    if (count < 0) count = 0;
+    if (count > 32) count = 32;
+
+    char sats_buf[32];
+    snprintf(sats_buf, sizeof(sats_buf), "%d 颗卫星", count);
+
+    lv_label_set_text(g.settings_gps_sats_label, sats_buf);
+
+    /* Set color based on satellite count */
+    if (count < 10) {
+        /* Less than 10: Red (poor signal) */
+        lv_obj_set_style_text_color(g.settings_gps_sats_label, lv_color_hex(0xFF0000), 0);
+    } else if (count < 20) {
+        /* 10-19: Orange (moderate signal) */
+        lv_obj_set_style_text_color(g.settings_gps_sats_label, lv_color_hex(0xFF8800), 0);
+    } else {
+        /* 20+: Green (good signal) */
+        lv_obj_set_style_text_color(g.settings_gps_sats_label, lv_color_hex(0x00FF00), 0);
+    }
+}
+
+void lv_demo_cattle_ai_tracker(void)
  {
      memset(&g, 0, sizeof(g));
 
@@ -333,6 +505,8 @@ static void update_pupil_position(void);
 
      /* Timer-based animation - 5 second intervals, 45 degrees per rotation */
      g.tick_timer = lv_timer_create(on_tick, 5000, NULL); /* 5000ms = 5 seconds */
+
+     set_gps_satellite_count(0);
  }
 
  /**********************
@@ -436,6 +610,9 @@ static void create_eyes(void)
     g.blink_phase = 0;
     g.pupil_x_offset = 0;
     g.pupil_y_offset = 0;
+    g.pupil_size = 100;  /* Default pupil size */
+    g.target_pupil_size = 100;
+    g.blink_variation = 0;
 
     /* Start with a random look direction */
     int initial_direction = rand() % 5;
@@ -453,17 +630,28 @@ static void create_eyes(void)
         g.target_pupil_y = 0;
     }
 
-    /* Create blink timer - start with random interval between 3-6 seconds (longer idle time) */
-    int initial_blink_delay = 3000 + (rand() % 3000);
+    /* Create blink timer - start with random interval between 3-8 seconds */
+    int initial_blink_delay = 3000 + (rand() % 5000);
     g.eye_blink_timer = lv_timer_create(eye_blink_timer_cb, initial_blink_delay, NULL);
 
     /* Create look around timer - 50ms continuous update */
     g.eye_look_timer = lv_timer_create(eye_look_timer_cb, 50, NULL);
 }
 
-/* Update pupil position based on current offsets */
+/* Update pupil position and size based on current offsets */
 static void update_pupil_position(void)
 {
+    /* Smoothly adjust pupil size (dilation effect) */
+    if (g.pupil_size != g.target_pupil_size) {
+        if (g.pupil_size < g.target_pupil_size) {
+            g.pupil_size += 2;
+            if (g.pupil_size > g.target_pupil_size) g.pupil_size = g.target_pupil_size;
+        } else {
+            g.pupil_size -= 2;
+            if (g.pupil_size < g.target_pupil_size) g.pupil_size = g.target_pupil_size;
+        }
+    }
+
     /* Apply pupil offset for looking around effect */
     lv_obj_align(g.left_pupil, LV_ALIGN_CENTER, g.pupil_x_offset, g.pupil_y_offset);
     lv_obj_align(g.right_pupil, LV_ALIGN_CENTER, g.pupil_x_offset, g.pupil_y_offset);
@@ -472,38 +660,80 @@ static void update_pupil_position(void)
 /* Update eye animation based on current state */
 static void update_eye_animation(void)
 {
-    const int EYE_WIDTH = 120;      /* Larger eyes */
-    const int EYE_HEIGHT = 120;     /* Larger eyes */
-    const int PUPIL_SIZE = 100;     /* Larger pupil */
+    const int EYE_WIDTH = 120;
+    const int EYE_HEIGHT = 120;
 
-    if (g.eye_state == 0) {
-        /* Idle state - normal round eyes */
+    switch (g.eye_state) {
+    case 0:  /* Idle state - normal round eyes with size variation */
         lv_obj_set_size(g.left_eye, EYE_WIDTH, EYE_HEIGHT);
         lv_obj_set_size(g.right_eye, EYE_WIDTH, EYE_HEIGHT);
-        lv_obj_set_size(g.left_pupil, PUPIL_SIZE, PUPIL_SIZE);
-        lv_obj_set_size(g.right_pupil, PUPIL_SIZE, PUPIL_SIZE);
+        lv_obj_set_size(g.left_pupil, g.pupil_size, g.pupil_size);
+        lv_obj_set_size(g.right_pupil, g.pupil_size, g.pupil_size);
         update_pupil_position();
+        break;
 
-    } else if (g.eye_state == 1) {
-        /* Blinking state - animate based on blink_phase (0-2, very quick blink) */
-        int blink_height = EYE_HEIGHT - (g.blink_phase * 50);  /* Quick dramatic blink */
-        if (blink_height < 20) blink_height = 20;
+    case 1:  /* Blinking state - quick oval blink */
+        {
+            int blink_height = EYE_HEIGHT - (g.blink_phase * 60);
+            if (blink_height < 30) blink_height = 30;
+            lv_obj_set_size(g.left_eye, EYE_WIDTH, blink_height);
+            lv_obj_set_size(g.right_eye, EYE_WIDTH, blink_height);
+            int pupil_height = blink_height - 15;
+            if (pupil_height < 15) pupil_height = 15;
+            lv_obj_set_size(g.left_pupil, g.pupil_size, pupil_height);
+            lv_obj_set_size(g.right_pupil, g.pupil_size, pupil_height);
+            update_pupil_position();
+        }
+        break;
 
-        lv_obj_set_size(g.left_eye, EYE_WIDTH, blink_height);
-        lv_obj_set_size(g.right_eye, EYE_WIDTH, blink_height);
-        int pupil_height = blink_height - 15;
-        if (pupil_height < 15) pupil_height = 15;
-        lv_obj_set_size(g.left_pupil, PUPIL_SIZE, pupil_height);
-        lv_obj_set_size(g.right_pupil, PUPIL_SIZE, pupil_height);
-        update_pupil_position();
-
-    } else if (g.eye_state == 2) {
-        /* Happy state - curved/oval eyes (like happy squinting) */
-        lv_obj_set_size(g.left_eye, EYE_WIDTH, 40);  /* Flatter eyes (scaled proportionally) */
+    case 2:  /* Happy state - curved/squinted eyes */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, 40);
         lv_obj_set_size(g.right_eye, EYE_WIDTH, 40);
-        lv_obj_set_size(g.left_pupil, PUPIL_SIZE, 30);  /* Smaller pupils */
-        lv_obj_set_size(g.right_pupil, PUPIL_SIZE, 30);
+        lv_obj_set_size(g.left_pupil, g.pupil_size, 30);
+        lv_obj_set_size(g.right_pupil, g.pupil_size, 30);
         update_pupil_position();
+        break;
+
+    case 3:  /* Surprised state - wide open eyes with dilated pupils */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH + 10, EYE_HEIGHT + 10);
+        lv_obj_set_size(g.right_eye, EYE_WIDTH + 10, EYE_HEIGHT + 10);
+        lv_obj_set_size(g.left_pupil, g.pupil_size, g.pupil_size);
+        lv_obj_set_size(g.right_pupil, g.pupil_size, g.pupil_size);
+        update_pupil_position();
+        break;
+
+    case 4:  /* Sleepy state - droopy eyes */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, 60);
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, 60);
+        lv_obj_set_size(g.left_pupil, g.pupil_size, 45);
+        lv_obj_set_size(g.right_pupil, g.pupil_size, 45);
+        update_pupil_position();
+        break;
+
+    case 5:  /* Wink state - left eye closed, right eye open */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, 20);  /* Left eye closed */
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, EYE_HEIGHT);  /* Right eye open */
+        lv_obj_set_size(g.left_pupil, g.pupil_size, 15);
+        lv_obj_set_size(g.right_pupil, g.pupil_size, g.pupil_size);
+        update_pupil_position();
+        break;
+
+    case 6:  /* Angry state - narrow eyes */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, 50);
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, 50);
+        lv_obj_set_size(g.left_pupil, g.pupil_size - 10, 40);
+        lv_obj_set_size(g.right_pupil, g.pupil_size - 10, 40);
+        update_pupil_position();
+        break;
+
+    default:
+        /* Default to idle */
+        lv_obj_set_size(g.left_eye, EYE_WIDTH, EYE_HEIGHT);
+        lv_obj_set_size(g.right_eye, EYE_WIDTH, EYE_HEIGHT);
+        lv_obj_set_size(g.left_pupil, g.pupil_size, g.pupil_size);
+        lv_obj_set_size(g.right_pupil, g.pupil_size, g.pupil_size);
+        update_pupil_position();
+        break;
     }
 }
 
@@ -520,23 +750,23 @@ static void eye_blink_timer_cb(lv_timer_t *timer)
     static int blink_step = 0;
 
     if (g.eye_state == 1) {
-        /* Currently blinking */
+        /* Currently blinking - single phase instant blink */
         g.blink_phase++;
 
-        if (g.blink_phase >= 2) {  /* Only 2 phases for very quick blink */
-            /* Start opening */
+        if (g.blink_phase >= 1) {  /* Only 1 phase for instant blink */
+            /* Start opening immediately */
             blink_step = 1;
         }
 
         if (blink_step == 1) {
             g.blink_phase--;
             if (g.blink_phase <= 0) {
-                /* Blink complete - set random next blink interval (3-7 seconds for more circle time) */
+                /* Blink complete - set random next blink interval */
                 g.eye_state = 0;  /* Return to idle */
                 g.blink_phase = 0;
                 blink_step = 0;
                 update_eye_animation();
-                int next_blink = 3000 + (rand() % 4000);  /* Random 3-7 seconds */
+                int next_blink = 3000 + (rand() % 5000);  /* Random 3-8 seconds */
                 lv_timer_set_period(timer, next_blink);
                 return;  /* Exit - don't override timer period */
             }
@@ -546,28 +776,47 @@ static void eye_blink_timer_cb(lv_timer_t *timer)
         update_eye_animation();
 
     } else if (g.eye_state == 0) {
-        /* Idle - start a quick blink */
-        g.eye_state = 1;
-        g.blink_phase = 0;
-        blink_step = 0;
-        int blink_speed = 25 + (rand() % 15);  /* Random speed 25-40ms per frame (very fast) */
-        lv_timer_set_period(timer, blink_speed);
+        /* Idle - occasionally trigger special expressions or normal blink */
+        int variation = rand() % 100;
 
-    } else if (g.eye_state == 2) {
-        /* Happy state - return to idle quickly (only stays for one timer call) */
-        static int happy_counter = 0;
-        happy_counter++;
-        if (happy_counter >= 10) {  /* Stay happy for ~300-500ms (10 cycles at 30-50ms) */
-            g.eye_state = 0;
-            happy_counter = 0;
+        if (variation < 5) {
+            /* 5% chance - Surprised expression */
+            g.eye_state = 3;
+            g.target_pupil_size = 110;  /* Dilated pupils */
             update_eye_animation();
-            /* Set random next blink interval */
-            int next_blink = 1000 + (rand() % 2000);  /* Return to blinking faster (1-3 seconds) */
-            lv_timer_set_period(timer, next_blink);
+            lv_timer_set_period(timer, 1000);  /* Hold for 1 second */
+        } else if (variation < 8) {
+            /* 3% chance - Wink */
+            g.eye_state = 5;
+            update_eye_animation();
+            lv_timer_set_period(timer, 500);  /* Hold for 0.5 seconds */
+        } else if (variation < 10) {
+            /* 2% chance - Sleepy */
+            g.eye_state = 4;
+            g.target_pupil_size = 85;  /* Smaller pupils when sleepy */
+            update_eye_animation();
+            lv_timer_set_period(timer, 1500);  /* Hold for 1.5 seconds */
         } else {
-            /* Keep timer running fast during happy state */
-            lv_timer_set_period(timer, 50);
+            /* 90% chance - Normal instant blink */
+            g.eye_state = 1;
+            g.blink_phase = 0;
+            blink_step = 0;
+
+            /* Occasionally do a double blink */
+            g.blink_variation = (rand() % 10) < 2 ? 1 : 0;  /* 20% double blink */
+
+            int blink_speed = 15 + (rand() % 10);  /* Random speed 15-25ms */
+            lv_timer_set_period(timer, blink_speed);
         }
+
+    } else if (g.eye_state >= 2) {
+        /* Special states (happy, surprised, sleepy, wink, angry) - return to idle after duration */
+        g.eye_state = 0;  /* Return to idle */
+        g.target_pupil_size = 100;  /* Reset pupil size */
+        update_eye_animation();
+        /* Set random next blink interval */
+        int next_blink = 3000 + (rand() % 5000);
+        lv_timer_set_period(timer, next_blink);
     }
 }
 
@@ -621,8 +870,13 @@ static void eye_look_timer_cb(lv_timer_t *timer)
     move_step++;
 
     if (move_step >= 20) {  /* Hold position for ~1 second (20 * 50ms) */
-        /* Choose new random target position */
+        /* Choose new random target position and pupil size variation */
         int direction = rand() % 10;
+
+        /* Add slight pupil size variation for breathing/life effect */
+        if (g.eye_state == 0) {  /* Only in idle state */
+            g.target_pupil_size = 95 + (rand() % 11);  /* Random 95-105 */
+        }
 
         if (direction < 2) {
             /* Look left */
@@ -660,21 +914,21 @@ static void eye_look_timer_cb(lv_timer_t *timer)
 
     /* Keep timer running at 50ms during hold period */
     lv_timer_set_period(timer, 50);
-}
+ }
 
-static void create_idle_screen(void)
-{
-    g.idle_screen = lv_obj_create(g.screen);
-    lv_obj_remove_style_all(g.idle_screen);
-    lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
-    lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
+ static void create_idle_screen(void)
+ {
+     g.idle_screen = lv_obj_create(g.screen);
+     lv_obj_remove_style_all(g.idle_screen);
+     lv_obj_set_size(g.idle_screen, CATTLE_SCREEN_WIDTH, CATTLE_SCREEN_HEIGHT);
+     lv_obj_set_style_bg_opa(g.idle_screen, LV_OPA_TRANSP, 0);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disable all scrolling flags to enforce 466x466 constraint */
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
-    lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
+     /* Disable all scrolling flags to enforce 466x466 constraint */
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_ONE);
+     lv_obj_clear_flag(g.idle_screen, LV_OBJ_FLAG_SCROLL_CHAIN);
 
     /* Create animated eyes in center */
     create_eyes();
@@ -1748,12 +2002,10 @@ static void create_idle_screen(void)
      lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_ONE);
      lv_obj_clear_flag(g.settings_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
 
-    /* GPS Status at top with icon */
-    lv_obj_t *gps_icon = lv_label_create(g.settings_panel);
-    lv_label_set_text(gps_icon, LV_SYMBOL_GPS);
-    lv_obj_set_style_text_color(gps_icon, lv_color_hex(0x00FF00), 0);
-    lv_obj_set_style_text_font(gps_icon, &lv_font_montserrat_20, 0);
-    lv_obj_align(gps_icon, LV_ALIGN_TOP_MID, -40, 35);  /* Moved up by 5px */
+   /* GPS Status at top with icon */
+   g.gps_icon_img = lv_img_create(g.settings_panel);
+   lv_img_set_src(g.gps_icon_img, &gps_icon);
+   lv_obj_align(g.gps_icon_img, LV_ALIGN_TOP_MID, -30, 35);  /* Moved up by 5px, adjusted for image size */
 
      lv_obj_t *gps_label = lv_label_create(g.settings_panel);
     lv_label_set_text(gps_label, "GPS状态");
@@ -1761,62 +2013,36 @@ static void create_idle_screen(void)
     lv_obj_set_style_text_font(gps_label, &font_puhui_18_2, 0);
     lv_obj_align(gps_label, LV_ALIGN_TOP_MID, 20, 35);  /* Moved up by 5px */
 
-    lv_obj_t *gps_sats = lv_label_create(g.settings_panel);
-    char buf[32];
-    snprintf(buf, sizeof(buf), "七颗卫星");
-    lv_label_set_text(gps_sats, buf);
-    lv_obj_set_style_text_color(gps_sats, lv_color_white(), 0);
-    lv_obj_set_style_text_font(gps_sats, &font_puhui_18_2, 0);
-    lv_obj_align(gps_sats, LV_ALIGN_TOP_MID, 0, 65);  /* Moved up by 5px */
+    g.settings_gps_sats_label = lv_label_create(g.settings_panel);
+    lv_label_set_text(g.settings_gps_sats_label, "0 颗卫星");
+    lv_obj_set_style_text_color(g.settings_gps_sats_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.settings_gps_sats_label, &font_puhui_18_2, 0);
+    lv_obj_align(g.settings_gps_sats_label, LV_ALIGN_TOP_MID, 0, 65);  /* Moved up by 5px */
 
     /* Large centered clock display */
-    lv_obj_t *date_label = lv_label_create(g.settings_panel);
-    lv_label_set_text(date_label, "2024 / 01 / 15");
-    lv_obj_set_style_text_color(date_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(date_label, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_LEFT, 0);  /* Align to left */
-    lv_obj_align(date_label, LV_ALIGN_CENTER, -95, -65);  // Move to left by 20px
+    g.settings_date_label = lv_label_create(g.settings_panel);
+    lv_label_set_text(g.settings_date_label, "1970 / 01 / 01");
+    lv_obj_set_style_text_color(g.settings_date_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.settings_date_label, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_align(g.settings_date_label, LV_TEXT_ALIGN_LEFT, 0);  /* Align to left */
+    lv_obj_align(g.settings_date_label, LV_ALIGN_CENTER, -95, -65);  // Move to left by 20px
 
-     lv_obj_t *time_label = lv_label_create(g.settings_panel);
-    lv_label_set_text(time_label, "14:30");
-     lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(time_label, &montserrat_time_82_extra_bold, 0);  /* Larger font */
-    lv_obj_align(time_label, LV_ALIGN_CENTER, -50, 0);  // Moved left by 20px
+    g.settings_time_label = lv_label_create(g.settings_panel);
+    lv_label_set_text(g.settings_time_label, "12:00");
+    lv_obj_set_style_text_color(g.settings_time_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(g.settings_time_label, &montserrat_time_82_extra_bold, 0);  /* Larger font */
+    lv_obj_align(g.settings_time_label, LV_ALIGN_CENTER, -50, 0);  // Moved left by 20px
 
-    /* Status icons on the right side */
-    /* 4G/Signal indicator circle background */
-    lv_obj_t *signal_bg = lv_obj_create(g.settings_panel);
-    lv_obj_set_size(signal_bg, 80, 80);
-    lv_obj_align(signal_bg, LV_ALIGN_RIGHT_MID, -65, -60);  /* 15px right, 10px up */
-    lv_obj_set_style_radius(signal_bg, 40, 0);
-    lv_obj_set_style_bg_color(signal_bg, lv_color_hex(0x222222), 0);
-    lv_obj_set_style_border_width(signal_bg, 0, 0);
+   /* Status icons on the right side - images already have circle backgrounds */
+   /* 4G/WiFi network icon */
+   g.network_icon_img = lv_img_create(g.settings_panel);
+   lv_img_set_src(g.network_icon_img, &_4g_enable);  /* Default to 4G enabled */
+   lv_obj_align(g.network_icon_img, LV_ALIGN_RIGHT_MID, -65, -60);  /* 15px right, 10px up */
 
-    // lv_obj_t *signal_text = lv_label_create(signal_bg);
-    // lv_label_set_text(signal_text, "4G");
-    // lv_obj_set_style_text_color(signal_text, lv_color_white(), 0);
-    // lv_obj_set_style_text_font(signal_text, &lv_font_montserrat_14, 0);
-    // lv_obj_align(signal_text, LV_ALIGN_TOP_MID, 0, 10);
-
-    lv_obj_t *signal_bars = lv_label_create(signal_bg);
-    lv_label_set_text(signal_bars, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(signal_bars, lv_color_white(), 0);
-    lv_obj_set_style_text_font(signal_bars, &lv_font_montserrat_24, 0);
-    lv_obj_align(signal_bars, LV_ALIGN_BOTTOM_MID, 0, -8);
-
-    /* Battery indicator circle background */
-    lv_obj_t *battery_bg = lv_obj_create(g.settings_panel);
-    lv_obj_set_size(battery_bg, 80, 80);
-    lv_obj_align(battery_bg, LV_ALIGN_RIGHT_MID, -65, 30);  /* 15px right, 10px up */
-    lv_obj_set_style_radius(battery_bg, 40, 0);
-    lv_obj_set_style_bg_color(battery_bg, lv_color_hex(0x222222), 0);
-    lv_obj_set_style_border_width(battery_bg, 0, 0);
-
-    lv_obj_t *battery_icon = lv_label_create(battery_bg);
-    lv_label_set_text(battery_icon, LV_SYMBOL_BATTERY_FULL);
-    lv_obj_set_style_text_color(battery_icon, lv_color_white(), 0);
-    lv_obj_set_style_text_font(battery_icon, &lv_font_montserrat_24, 0);
-    lv_obj_center(battery_icon);
+   /* Battery icon */
+   g.battery_icon_img = lv_img_create(g.settings_panel);
+   lv_img_set_src(g.battery_icon_img, &battery_full);  /* Default to full battery */
+   lv_obj_align(g.battery_icon_img, LV_ALIGN_RIGHT_MID, -65, 30);  /* 15px right, 10px up */
 
     /* Volume section at bottom */
     lv_obj_t *vol_icon = lv_label_create(g.settings_panel);
@@ -1832,33 +2058,34 @@ static void create_idle_screen(void)
     lv_obj_align(vol_label, LV_ALIGN_BOTTOM_LEFT, 120, -135);  /* Moved up by 15px */
 
     /* Create custom styled slider matching the design */
-     lv_obj_t *slider = lv_slider_create(g.settings_panel);
-    lv_obj_set_width(slider, 280);  /* Shorter slider */
-    lv_obj_set_height(slider, 10);
-    lv_obj_align(slider, LV_ALIGN_BOTTOM_MID, 0, -105);  /* Moved up by 15px */
-     lv_slider_set_range(slider, 0, 100);
-    lv_slider_set_value(slider, 60, LV_ANIM_OFF);
+    g.settings_volume_slider = lv_slider_create(g.settings_panel);
+    lv_obj_set_width(g.settings_volume_slider, 280);  /* Shorter slider */
+    lv_obj_set_height(g.settings_volume_slider, 10);
+    lv_obj_align(g.settings_volume_slider, LV_ALIGN_BOTTOM_MID, 0, -105);  /* Moved up by 15px */
+    lv_slider_set_range(g.settings_volume_slider, 0, 100);
+    lv_slider_set_value(g.settings_volume_slider, 60, LV_ANIM_OFF);
+    g.current_volume = 60;  /* Initialize volume to 60% */
 
     /* Style for the main track (background/unfilled part) */
-    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0x2D3E50), LV_PART_MAIN);
-    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_pad_ver(slider, -2, LV_PART_MAIN); /* Makes indicator slightly larger */
+    lv_obj_set_style_bg_opa(g.settings_volume_slider, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(g.settings_volume_slider, lv_color_hex(0x2D3E50), LV_PART_MAIN);
+    lv_obj_set_style_radius(g.settings_volume_slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(g.settings_volume_slider, -2, LV_PART_MAIN); /* Makes indicator slightly larger */
 
     /* Style for the indicator (filled/blue part) */
-    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0x1E90FF), LV_PART_INDICATOR);
-    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(g.settings_volume_slider, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(g.settings_volume_slider, lv_color_hex(0x1E90FF), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(g.settings_volume_slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
 
     /* Style for the knob (circular white handle) */
-    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_KNOB);
-    lv_obj_set_style_bg_color(slider, lv_color_white(), LV_PART_KNOB);
-    lv_obj_set_style_border_width(slider, 0, LV_PART_KNOB);
-    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider, 10, LV_PART_KNOB); /* Makes knob larger */
-    lv_obj_set_style_shadow_width(slider, 8, LV_PART_KNOB);
-    lv_obj_set_style_shadow_color(slider, lv_color_black(), LV_PART_KNOB);
-    lv_obj_set_style_shadow_opa(slider, LV_OPA_20, LV_PART_KNOB);
+    lv_obj_set_style_bg_opa(g.settings_volume_slider, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(g.settings_volume_slider, lv_color_white(), LV_PART_KNOB);
+    lv_obj_set_style_border_width(g.settings_volume_slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_radius(g.settings_volume_slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(g.settings_volume_slider, 10, LV_PART_KNOB); /* Makes knob larger */
+    lv_obj_set_style_shadow_width(g.settings_volume_slider, 8, LV_PART_KNOB);
+    lv_obj_set_style_shadow_color(g.settings_volume_slider, lv_color_black(), LV_PART_KNOB);
+    lv_obj_set_style_shadow_opa(g.settings_volume_slider, LV_OPA_20, LV_PART_KNOB);
 
 
     /* Draggable tab at very bottom */
@@ -2194,10 +2421,10 @@ static void create_idle_screen(void)
          printf("Key 5 - animating to 3km scale\n");
          animate_distance_scale(3000);
          break;
-    case '6': // 5km scale
-        printf("Key 6 - animating to 5km scale\n");
-        animate_distance_scale(5000);
-        break;
+     case '6': // 5km scale
+         printf("Key 6 - animating to 5km scale\n");
+         animate_distance_scale(5000);
+         break;
 
     /* Eye animation controls */
     case 'n':
@@ -2277,10 +2504,32 @@ static void create_idle_screen(void)
             }
         }
         break;
-
-    default:
-        printf("Unhandled key: %d\n", key);
+    case 'o':
+    case 'O': // Surprised expression
+        printf("Key O - surprised expression\n");
+        set_idle_eye_state(3);  // 3 = surprised
+        g.target_pupil_size = 110;  // Dilated pupils
         break;
+    case 'z':
+    case 'Z': // Sleepy expression
+        printf("Key Z - sleepy expression\n");
+        set_idle_eye_state(4);  // 4 = sleepy
+        g.target_pupil_size = 85;  // Smaller pupils
+        break;
+    case 'w':
+    case 'W': // Wink
+        printf("Key W - wink\n");
+        set_idle_eye_state(5);  // 5 = wink
+        break;
+    case 'a':
+    case 'A': // Angry expression
+        printf("Key A - angry expression\n");
+        set_idle_eye_state(6);  // 6 = angry
+        break;
+
+     default:
+         printf("Unhandled key: %d\n", key);
+         break;
      }
  }
 
@@ -2868,9 +3117,9 @@ static void typewriter_timer_cb(lv_timer_t *timer)
 void set_idle_eye_state(int state)
 {
     set_eye_state(state);
-}
+ }
 
-/* Public GPS API Functions */
+ /* Public GPS API Functions */
  void gps_add_target(float lat, float lon, uint32_t color)
  {
      add_target_coord(lat, lon, color);
