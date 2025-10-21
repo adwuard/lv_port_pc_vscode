@@ -26,7 +26,7 @@ LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_puhui_18_2);
 LV_FONT_DECLARE(font_puhui_20_2);
 LV_FONT_DECLARE(font_puhui_20_4);
-// LV_FONT_DECLARE(font_puhui_30_4);
+LV_FONT_DECLARE(font_puhui_30_4);
 LV_FONT_DECLARE(montserrat_time_82_extra_bold);
 
 /* Icon image declarations */
@@ -222,6 +222,24 @@ int get_volume(void);
  * Examples: 0="0 颗卫星", 7="7 颗卫星", 15="15 颗卫星", 32="32 颗卫星"
  */
 void set_gps_satellite_count(int count);
+
+/* Red ring indicator on idle screen
+ * Shows/hides a red 5px border ring and microphone icon on the idle screen
+ * Can be toggled with 'Y' key
+ * @param visible: true to show red ring and microphone icon, false to hide
+ *
+ * Visual elements:
+ *   - Red 5px circular border ring around screen
+ *   - Red microphone icon at top center
+ *
+ * Use cases: Recording indicator, alert state, focus mode, transmission active
+ */
+void set_idle_red_ring(bool visible);
+
+/* Toggles the red ring and microphone icon visibility
+ * Switches between shown and hidden state
+ */
+void toggle_idle_red_ring(void);
 
 #ifdef __cplusplus
 }
